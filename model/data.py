@@ -1,5 +1,5 @@
 from typing import Any, ClassVar, Dict, Optional, Type
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
+from transformers import PreTrainedModel
 from pydantic import BaseModel, Field, PositiveInt
 
 # The maximum bytes for metadata on the chain.
@@ -60,7 +60,6 @@ class Model(BaseModel):
     id: ModelId = Field(description="Identifier for this model.")
     # PreTrainedModel.base_model returns torch.nn.Module if needed.
     pt_model: PreTrainedModel = Field(description="Pre trained model.")
-    tokenizer: PreTrainedTokenizerBase = Field(description="Pre trained tokenizer.")
 
 
 class ModelMetadata(BaseModel):

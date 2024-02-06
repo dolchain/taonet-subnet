@@ -16,8 +16,8 @@ class ChainModelMetadataStore(ModelMetadataStore):
     def __init__(
         self,
         subtensor: bt.subtensor,
-        subnet_uid: int,
         wallet: Optional[bt.wallet] = None,
+        subnet_uid: int = constants.SUBNET_UID,
     ):
         self.subtensor = subtensor
         self.wallet = (

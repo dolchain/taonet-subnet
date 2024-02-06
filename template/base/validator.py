@@ -23,9 +23,17 @@ import torch
 import asyncio
 import threading
 import bittensor as bt
+import datetime
+import os
 
 from typing import List
 from traceback import print_exception
+import taonet
+from transformers import PreTrainedModel
+from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
+from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
+from model.storage.model_metadata_store import ModelMetadataStore
+from model.storage.remote_model_store import RemoteModelStore
 
 from template.base.neuron import BaseNeuron
 
@@ -102,7 +110,69 @@ class BaseValidatorNeuron(BaseNeuron):
             for _ in range(self.config.neuron.num_concurrent_forwards)
         ]
         return await asyncio.gather(*coroutines)
-        
+
+    async def load_starting_model(
+        self,
+        config: bt.config,
+        metagraph: bt.metagraph,
+        metadata_store: ModelMetadataStore,
+        remote_model_store: RemoteModelStore,
+    ) -> PreTrainedModel:
+        """Loads the model to train based on the provided config."""
+
+        # Initialize the model based on the best on the network.
+        if config.load_best:
+            # Get the best UID be incentive and load it.
+            best_uid = taonet.graph.best_uid(metagraph)
+            model = await taonet.mining.load_remote_model(
+                best_uid, config.model_dir, metagraph, metadata_store, remote_model_store
+            )
+            bt.logging.success(
+                f"Training with model from best uid: {best_uid}. Model={str(model)}"
+            )
+            return model
+
+        # Initialize the model based on a passed uid.
+        if config.load_uid is not None:
+            # Sync the state from the passed uid.
+            model = await taonet.mining.load_remote_model(
+                config.load_uid,
+                config.model_dir,
+                metagraph,
+                metadata_store,
+                remote_model_store,
+            )
+            bt.logging.success(
+                f"Training with model from uid: {config.load_uid}. Model={str(model)}"
+            )
+            return model
+
+        # Check if we should load a model from a local directory.
+        if config.load_model_dir:
+            model = taonet.mining.load_local_model(config.load_model_dir)
+            bt.logging.success(
+                f"Training with model from disk. Model={str(model)}")
+            return model
+
+        # Check if we should load a model from a local file.
+        if config.load_model:
+            model = taonet.mining.load_gpt2_model(config.load_model)
+            bt.logging.success(
+                f"Training with model from disk. Model={str(model)}")
+            return model
+
+        # Start from scratch.
+        model = taonet.model.get_model()
+        bt.logging.success(f"Training from scratch. Model={str(model)}")
+
+        return model
+
+    async def concurrent_load_starting_model(self, config: bt.config,
+                                             metagraph: bt.metagraph,
+                                             metadata_store: ModelMetadataStore,
+                                             remote_model_store: RemoteModelStore,):
+        return await self.load_starting_model(config, metagraph, metadata_store, remote_model_store)
+
     def run(self):
         """
         Initiates and manages the main loop for the miner on the Bittensor network. The main loop handles graceful shutdown on keyboard interrupts and logs unforeseen errors.
@@ -132,13 +202,29 @@ class BaseValidatorNeuron(BaseNeuron):
 
         bt.logging.info(f"Validator starting at block: {self.block}")
 
+        # Create a unique run id for this run.
+        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        model_dir = taonet.validation.model_path(
+            self.config.neuron.model_dir, run_id)
+        os.makedirs(model_dir, exist_ok=True)
+
+        # Init model.
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()
+        model: PreTrainedModel = self.loop.run_until_complete(self.concurrent_load_starting_model(
+            self.config, self.metagraph, metadata_store, remote_store
+        ))
+        model = model.train()
+        model = model.to(self.config.device)
+
+        bt.logging.success(f"Saving model to path: {model_dir}.")
+        taonet.validation.save(model, model_dir)
+
         # This loop maintains the validator's operations until intentionally stopped.
         try:
-            bt.logging.info('Calling miners')
-
             self.loop.run_until_complete(self.concurrent_start_train())
-            
-            
+
             while True:
                 bt.logging.info(f"step({self.step}) block({self.block})")
 

@@ -41,27 +41,28 @@ def get_hf_download_path(local_path: str, model_id: ModelId) -> str:
 
 
 def get_newest_datetime_under_path(path: str) -> datetime.datetime:
-    newest_filetime = sys.maxsize
+    newest_filetime = 0
 
     # Check to see if any file at any level was modified more recently than the current one.
     for cur_path, dirnames, filenames in os.walk(path):
         for filename in filenames:
-            path = os.path.join(cur_path, filename)
             try:
+                path = os.path.join(cur_path, filename)
                 mod_time = os.stat(path).st_mtime
-                if mod_time < newest_filetime:
+                if mod_time > newest_filetime:
                     newest_filetime = mod_time
-            except:
+            except FileNotFoundError:
                 pass
 
-    if newest_filetime == sys.maxsize:
-        return datetime.datetime.max
+    if newest_filetime == 0:
+        return datetime.datetime.min
 
     return datetime.datetime.fromtimestamp(newest_filetime)
 
 
-def remove_dir_out_of_grace_by_datetime(path: str, grace_period_seconds: int, last_modified: datetime.datetime) -> bool:
+def remove_dir_out_of_grace(path: str, grace_period_seconds: int) -> bool:
     """Removes a dir if the last modified time is out of grace period secs. Returns if it was deleted."""
+    last_modified = get_newest_datetime_under_path(path)
     grace = datetime.timedelta(seconds=grace_period_seconds)
 
     if last_modified < datetime.datetime.now() - grace:
@@ -69,11 +70,6 @@ def remove_dir_out_of_grace_by_datetime(path: str, grace_period_seconds: int, la
         return True
 
     return False
-
-def remove_dir_out_of_grace(path: str, grace_period_seconds: int) -> bool:
-    """Removes a dir if the last modified time is out of grace period secs. Returns if it was deleted."""
-    last_modified = get_newest_datetime_under_path(path)
-    return remove_dir_out_of_grace_by_datetime(path, grace_period_seconds, last_modified)
 
 
 def realize_symlinks_in_directory(path: str) -> int:

@@ -21,6 +21,7 @@ import torch
 import argparse
 import bittensor as bt
 from loguru import logger
+import constants
 
 
 def check_config(cls, config: "bt.Config"):
@@ -160,6 +161,19 @@ def add_args(cls, parser):
             type=str,
             default='',
             help="Model Id",
+        )
+
+        parser.add_argument(
+            "--neuron.model_dir",
+            type=str,
+            default=os.path.join(constants.ROOT_DIR, "local-models/"),
+            help="Where to download/save models for training",
+        )
+            
+        parser.add_argument(
+            "--hf_repo_id",
+            type=str,
+            help="The hugging face repo id, which should include the org or user and repo name. E.g. jdoe/finetuned",
         )
 
     else:

@@ -3,8 +3,7 @@ import os
 from huggingface_hub import HfApi
 from model.data import Model, ModelId
 from model.storage.disk import utils
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from constants import ModelParameters, MAX_HUGGING_FACE_BYTES
+from transformers import AutoModelForCausalLM
 
 from model.storage.remote_model_store import RemoteModelStore
 import constants
@@ -20,16 +19,11 @@ class HuggingFaceModelStore(RemoteModelStore):
             raise ValueError("No Hugging Face access token found to write to the hub.")
         return os.getenv("HF_ACCESS_TOKEN")
 
-    async def upload_model(self, model: Model, model_parameters: ModelParameters) -> ModelId:
+    async def upload_model(self, model: Model) -> ModelId:
         """Uploads a trained model to Hugging Face."""
         token = HuggingFaceModelStore.assert_access_token_exists()
 
         # PreTrainedModel.save_pretrained only saves locally
-        model.tokenizer.push_to_hub(
-            repo_id=model.id.namespace + "/" + model.id.name,
-            token=token,
-        )
-
         commit_info = model.pt_model.push_to_hub(
             repo_id=model.id.namespace + "/" + model.id.name,
             token=token,
@@ -46,11 +40,11 @@ class HuggingFaceModelStore(RemoteModelStore):
         # TODO consider skipping the redownload if a hash is already provided.
         # To get the hash we need to redownload it at a local tmp directory after which it can be deleted.
         with tempfile.TemporaryDirectory() as temp_dir:
-            model_with_hash = await self.download_model(model_id_with_commit, temp_dir, model_parameters)
+            model_with_hash = await self.download_model(model_id_with_commit, temp_dir)
             # Return a ModelId with both the correct commit and hash.
             return model_with_hash.id
 
-    async def download_model(self, model_id: ModelId, local_path: str, model_parameters: ModelParameters) -> Model:
+    async def download_model(self, model_id: ModelId, local_path: str) -> Model:
         """Retrieves a trained model from Hugging Face."""
         if not model_id.commit:
             raise ValueError("No Hugging Face commit id found to read from the hub.")
@@ -63,25 +57,17 @@ class HuggingFaceModelStore(RemoteModelStore):
             repo_id=repo_id, revision=model_id.commit, timeout=10, files_metadata=True
         )
         size = sum(repo_file.size for repo_file in model_info.siblings)
-        if size > MAX_HUGGING_FACE_BYTES:
+        if size > constants.MAX_HUGGING_FACE_BYTES:
             raise ValueError(
-                f"Hugging Face repo over maximum size limit. Size {size}. Limit {MAX_HUGGING_FACE_BYTES}."
+                f"Hugging Face repo over maximum size limit. Size {size}. Limit {constants.MAX_HUGGING_FACE_BYTES}."
             )
 
         # Transformers library can pick up a model based on the hugging face path (username/model) + rev.
-
-        model = model_parameters.architecture.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path=repo_id,
             revision=model_id.commit,
             cache_dir=local_path,
             use_safetensors=True,
-            **model_parameters.kwargs
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=repo_id,
-            revision=model_id.commit,
-            cache_dir=local_path,
         )
 
         # Get the directory the model was stored to.
@@ -99,4 +85,4 @@ class HuggingFaceModelStore(RemoteModelStore):
             hash=model_hash,
         )
 
-        return Model(id=model_id_with_hash, pt_model=model, tokenizer=tokenizer)
+        return Model(id=model_id_with_hash, pt_model=model)

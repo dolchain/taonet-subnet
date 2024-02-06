@@ -4,7 +4,7 @@ from model.data import Model, ModelId
 from model.storage.disk import utils
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
 
-from finetune.model import get_model
+from taonet.model import get_model
 
 
 async def test_roundtrip_model():
@@ -26,7 +26,7 @@ async def test_roundtrip_model():
     # Retrieve the model from hf.
     retrieved_model = await hf_model_store.download_model(
         model_id=model.id,
-        local_path=utils.get_local_miner_dir("test-models", "hotkey0")
+        local_path=utils.get_local_miner_dir("test-models", "hotkey0"),
     )
 
     # Check that they match.
@@ -49,7 +49,7 @@ async def test_retrieve_model():
     # Retrieve the model from hf (first run) or cache.
     model = await hf_model_store.download_model(
         model_id=model_id,
-        local_path=utils.get_local_miner_dir("test-models", "hotkey0")
+        local_path=utils.get_local_miner_dir("test-models", "hotkey0"),
     )
 
     print(f"Finished retrieving the model with id: {model.id}")
@@ -69,7 +69,7 @@ async def test_retrieve_oversized_model():
     try:
         model = await hf_model_store.download_model(
             model_id=model_id,
-            local_path=utils.get_local_miner_dir("test-models", "hotkey0")
+            local_path=utils.get_local_miner_dir("test-models", "hotkey0"),
         )
     except ValueError as ve:
         print(f"Caught expected exception for downloading too large of a model: {ve}")
@@ -96,7 +96,7 @@ async def test_retrieve_multiple_models_for_hotkey():
     # Retrieve the model from hf (first run) or cache.
     model_1 = await hf_model_store.download_model(
         model_id=model_id_1,
-        local_path=utils.get_local_miner_dir("test-models", "hotkey0")
+        local_path=utils.get_local_miner_dir("test-models", "hotkey0"),
     )
 
     expected_hash_1 = "3+voQJtkt7UCBvrLILeTz0oUE6iusGnXrCPZ3Mv664o="
@@ -106,7 +106,7 @@ async def test_retrieve_multiple_models_for_hotkey():
 
     model_2 = await hf_model_store.download_model(
         model_id=model_id_2,
-        local_path=utils.get_local_miner_dir("test-models", "hotkey0")
+        local_path=utils.get_local_miner_dir("test-models", "hotkey0"),
     )
     expected_hash_2 = "ZgTmR9X6YlD+ADOvbojE0JXEmAiTN/ok+QlukGXF61E="
 
