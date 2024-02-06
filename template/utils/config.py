@@ -114,7 +114,7 @@ def add_args(cls, parser):
             "--neuron.sample_size",
             type=int,
             help="The number of miners to query in a single step.",
-            default=10,
+            default=3,
         )
 
         parser.add_argument(
@@ -146,6 +146,20 @@ def add_args(cls, parser):
             type=int,
             help="The maximum number of TAO allowed to query a validator with a vpermit.",
             default=4096,
+        )
+
+        parser.add_argument(
+            "--neuron.peer_count",
+            type=int,
+            default=3,
+            help="The number of raining peers(miners)",
+        )
+
+        parser.add_argument(
+            "--neuron.model_id",
+            type=str,
+            default='',
+            help="Model Id",
         )
 
     else:

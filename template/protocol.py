@@ -65,7 +65,7 @@ class Dummy(bt.Synapse):
 
         Returns:
         - int: The deserialized response, which in this case is the value of dummy_output.
-
+                                                         
         Example:
         Assuming a Dummy instance has a dummy_output value of 5:
         >>> dummy_instance = Dummy(dummy_input=4)
@@ -74,3 +74,15 @@ class Dummy(bt.Synapse):
         5
         """
         return self.dummy_output
+    
+    
+class CallMiners(bt.Synapse):
+    will_work: bool = False
+    def deserialize(self) -> bool:
+        return self.will_work
+
+class StartMiners(bt.Synapse):
+    model_id: str = ''
+    start_work: bool = False
+    def deserialize(self) -> bool:
+        return self.start_work

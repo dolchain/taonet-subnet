@@ -96,6 +96,13 @@ class BaseValidatorNeuron(BaseNeuron):
         ]
         await asyncio.gather(*coroutines)
 
+    async def concurrent_start_train(self):
+        coroutines = [
+            self.start_train()
+            for _ in range(self.config.neuron.num_concurrent_forwards)
+        ]
+        return await asyncio.gather(*coroutines)
+        
     def run(self):
         """
         Initiates and manages the main loop for the miner on the Bittensor network. The main loop handles graceful shutdown on keyboard interrupts and logs unforeseen errors.
@@ -127,6 +134,11 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # This loop maintains the validator's operations until intentionally stopped.
         try:
+            bt.logging.info('Calling miners')
+
+            self.loop.run_until_complete(self.concurrent_start_train())
+            
+            
             while True:
                 bt.logging.info(f"step({self.step}) block({self.block})")
 

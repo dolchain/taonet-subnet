@@ -42,6 +42,9 @@ class Miner(BaseMinerNeuron):
 
         # TODO(developer): Anything specific to your use case you can do here
 
+        # Indicates if miner is working currently
+        self.working = False
+
     async def forward(
         self, synapse: template.protocol.Dummy
     ) -> template.protocol.Dummy:
@@ -139,10 +142,55 @@ class Miner(BaseMinerNeuron):
         )
         return prirority
 
+    # Process income CallMiners Synapse
+    async def call_miners(
+        self, synapse: template.protocol.CallMiners
+    ) -> template.protocol.CallMiners:
+        # Will work if not working currently
+        synapse.will_work = not self.working
+        return synapse
 
+    async def blacklist_call_start_miners(
+        self, synapse: bt.Synapse
+    ) -> typing.Tuple[bool, str]:
+        # TODO(developer): Define how miners should blacklist requests.
+        if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        # Blacklist synapse if currently working.
+        return self.working, f"Hotkey recognized! {'But working' if self.working else 'and can work'}"
+        
+    async def blacklist_call_miners(
+        self, synapse: template.protocol.CallMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist_call_start_miners(synapse)
+    
+    async def blacklist_start_miners(
+        self, synapse: template.protocol.StartMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist_call_start_miners(synapse)
+
+    # Process income StartMiners Synapse
+    async def start_miners(
+        self, synapse: template.protocol.StartMiners
+    ) -> template.protocol.StartMiners:
+        # Start work if not working currently
+        synapse.start_work = self.working = True
+        return synapse
+
+    async def start_train(slef):
+        pass
+        
 # This is the main function, which runs the miner.
 if __name__ == "__main__":
     with Miner() as miner:
         while True:
             bt.logging.info("Miner running...", time.time())
-            time.sleep(5)
+            time.sleep(30)

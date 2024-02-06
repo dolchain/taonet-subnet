@@ -26,6 +26,7 @@ import bittensor as bt
 # Bittensor Validator Template:
 import template
 from template.validator import forward
+from template.validator import start_train
 
 # import base validator class which takes care of most of the boilerplate
 from template.base.validator import BaseValidatorNeuron
@@ -60,10 +61,12 @@ class Validator(BaseValidatorNeuron):
         # TODO(developer): Rewrite this function based on your protocol definition.
         return await forward(self)
 
+    async def start_train(self):
+        return await start_train(self)
 
 # The main function parses the configuration and runs the validator.
 if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info("Validator running...", time.time())
-            time.sleep(5)
+            time.sleep(30)
