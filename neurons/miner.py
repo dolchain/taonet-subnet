@@ -31,6 +31,9 @@ from model.storage.chain.chain_model_metadata_store import ChainModelMetadataSto
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
 from model.storage.model_metadata_store import ModelMetadataStore
 from model.storage.remote_model_store import RemoteModelStore
+import torch
+import math
+import random
 
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
@@ -198,17 +201,94 @@ class Miner(BaseMinerNeuron):
         metadata_store = ChainModelMetadataStore(
             self.subtensor, self.wallet, self.config.netuid)
         remote_store = HuggingFaceModelStore()
-        self.model: PreTrainedModel = await self.load_model_from_uid(
+        model: PreTrainedModel = await self.load_model_from_uid(
             vali_uid, self.config, self.metagraph, metadata_store, remote_store
         )        
-        asyncio.create_task(self.train())
+        asyncio.create_task(self.train(model, self.config.model_dir))
 
         synapse.start_work = True
         return synapse
     
-    async def train(self):
-        bt.logging.success(f'training...')
-        pass
+    async def train(self, model, model_dir):
+        model = model.train()
+        model = model.to(self.config.device)
+
+        # Build optimizer
+        optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=0.01)
+
+        # Start the training loop
+        epoch_step = 0
+        global_step = 0
+        n_acc_steps = 0
+        best_avg_loss = math.inf
+        accumulation_steps = self.config.accumulation_steps
+        try:
+            while True:
+                # Initialize loss accumulator for the epoch
+                epoch_loss = 0.0
+
+                # Prepare the data loader with random pages for each epoch
+                bt.logging.success(
+                    f"Loading {self.config.pages_per_epoch} pages for training this epoch"
+                )
+                random_pages = [
+                    random.randint(1, taonet.dataset.SubsetFalconLoader.max_pages)
+                    for _ in range(self.config.pages_per_epoch)
+                ]
+                loader = taonet.dataset.SubsetFalconLoader(
+                    batch_size=self.config.bs, sequence_length=self.config.sl, pages=random_pages
+                )
+
+                # Enumerate over the data loader
+                n_batches = 0
+                optimizer.zero_grad()  # Initialize gradients to zero
+
+                for i, batch in enumerate(loader):
+                    # Move the input batch to the device
+                    inputs = batch.to(model.device)
+
+                    # Forward pass: compute the model output and loss
+                    outputs = model(inputs, labels=inputs)
+
+                    loss = outputs.loss / accumulation_steps  # Scale loss
+                    loss.backward()  # Accumulate gradients
+
+                    if (i + 1) % accumulation_steps == 0:
+                        n_acc_steps += 1
+
+                        # GRADIENT SHARE
+
+                        optimizer.step()  # Perform a single optimization step
+                        optimizer.zero_grad()  # Clear gradients
+                        bt.logging.success(
+                            f"Step: {n_acc_steps} loss: {outputs.loss.detach().item()}"
+                        )
+               
+                    torch.cuda.empty_cache()
+
+                    n_batches += 1
+                    global_step += 1
+                    epoch_loss += outputs.loss.detach().item()
+
+                # Calculate the average loss for the epoch
+                avg_loss = epoch_loss / n_batches
+
+                # Log the average loss for the epoch
+                bt.logging.success(f"Epoch: {epoch_step} average loss: {avg_loss}")
+                epoch_step += 1
+
+                # Check if the average loss of this epoch is the best we've seen so far
+                if avg_loss < best_avg_loss:
+                    best_avg_loss = avg_loss  # Update the best average loss
+
+                    bt.logging.success(f"New best average loss: {best_avg_loss}.")
+
+                    # # Save the model to your mining dir.
+                    # bt.logging.success(f"Saving model to path: {model_dir}.")
+                    # taonet.mining.save(model, model_dir)
+        finally:
+            pass
+
 
     async def load_model_from_uid(
         self,
