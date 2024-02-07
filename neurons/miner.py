@@ -18,11 +18,19 @@
 # DEALINGS IN THE SOFTWARE.
 
 import time
+import asyncio
 import typing
 import bittensor as bt
 
 # Bittensor Miner Template:
 import template
+
+import taonet
+from transformers import PreTrainedModel
+from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
+from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
+from model.storage.model_metadata_store import ModelMetadataStore
+from model.storage.remote_model_store import RemoteModelStore
 
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
@@ -166,12 +174,12 @@ class Miner(BaseMinerNeuron):
         )
         # Blacklist synapse if currently working.
         return self.working, f"Hotkey recognized! {'But working' if self.working else 'and can work'}"
-        
+
     async def blacklist_call_miners(
         self, synapse: template.protocol.CallMiners
     ) -> typing.Tuple[bool, str]:
         return await self.blacklist_call_start_miners(synapse)
-    
+
     async def blacklist_start_miners(
         self, synapse: template.protocol.StartMiners
     ) -> typing.Tuple[bool, str]:
@@ -182,12 +190,50 @@ class Miner(BaseMinerNeuron):
         self, synapse: template.protocol.StartMiners
     ) -> template.protocol.StartMiners:
         # Start work if not working currently
-        synapse.start_work = self.working = True
-        return synapse
+        self.working = True
+        vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        bt.logging.success(f'synapse from uid: {vali_uid}')
 
-    async def start_train(slef):
+        # Init model.
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()
+        self.model: PreTrainedModel = await self.load_model_from_uid(
+            vali_uid, self.config, self.metagraph, metadata_store, remote_store
+        )        
+        asyncio.create_task(self.train())
+
+        synapse.start_work = True
+        return synapse
+    
+    async def train(self):
+        bt.logging.success(f'training...')
         pass
-        
+
+    async def load_model_from_uid(
+        self,
+        vali_uid: int,
+        config: bt.config,
+        metagraph: bt.metagraph,
+        metadata_store: ModelMetadataStore,
+        remote_model_store: RemoteModelStore,
+    ) -> PreTrainedModel:
+
+        # Initialize the model based on a passed uid.
+        # Sync the state from the passed uid.
+        model = await taonet.mining.load_remote_model(
+            vali_uid,
+            config.model_dir,
+            metagraph,
+            metadata_store,
+            remote_model_store,
+        )
+        bt.logging.success(
+            f"Training with model from uid: {config.load_uid}. Model={str(model)}"
+        )
+        return model
+
+
 # This is the main function, which runs the miner.
 if __name__ == "__main__":
     with Miner() as miner:

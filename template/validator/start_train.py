@@ -36,14 +36,14 @@ async def start_train(self):
         # bt.logging.info(f"Received responses: {volunteer_responses}")
 
         # Choose candidates among volunteers
-        volunteer_uids, candidate_uids = get_candidate_uids(self, miner_uids=miner_uids, responses=volunteer_responses, peer_count=self.config.neuron.peer_count)
+        volunteer_uids, candidate_uids = get_candidate_uids(self, miner_uids=miner_uids, responses=volunteer_responses, peer_count=self.config.peer_count)
                 
         # Make candidate miners to start training
         candidate_responses = self.dendrite.query(
             # Send the query to selected miner axons in the network.
             axons=[self.metagraph.axons[uid] for uid in candidate_uids],
             # Construct a CallMiners query.
-            synapse=StartMiners(model_id=self.config.neuron.model_id),
+            synapse=StartMiners(),
             # All responses have the deserialize function called on them before returning.
             # You are encouraged to define your own deserialization function.
             deserialize=True,

@@ -102,6 +102,13 @@ def add_args(cls, parser):
         help="If set, we dont save events to a log file.",
         default=False,
     )
+    
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default=os.path.join(constants.ROOT_DIR, "local-models/"),
+        help="Where to download/save models for training",
+    )
 
     if neuron_type == "validator":
         parser.add_argument(
@@ -150,30 +157,23 @@ def add_args(cls, parser):
         )
 
         parser.add_argument(
-            "--neuron.peer_count",
+            "--peer_count",
             type=int,
             default=3,
             help="The number of raining peers(miners)",
-        )
-
-        parser.add_argument(
-            "--neuron.model_id",
-            type=str,
-            default='',
-            help="Model Id",
-        )
-
-        parser.add_argument(
-            "--neuron.model_dir",
-            type=str,
-            default=os.path.join(constants.ROOT_DIR, "local-models/"),
-            help="Where to download/save models for training",
         )
             
         parser.add_argument(
             "--hf_repo_id",
             type=str,
             help="The hugging face repo id, which should include the org or user and repo name. E.g. jdoe/finetuned",
+        )
+
+        parser.add_argument(
+            "--load_uid",
+            type=int,
+            default=None,
+            help="If passed loads the model under the specified uid.",
         )
 
     else:

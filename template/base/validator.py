@@ -165,13 +165,40 @@ class BaseValidatorNeuron(BaseNeuron):
         model = taonet.model.get_model()
         bt.logging.success(f"Training from scratch. Model={str(model)}")
 
+        await taonet.mining.push(
+            model,
+            self.config.hf_repo_id,
+            self.wallet,
+            metadata_store=metadata_store,
+            remote_model_store=remote_model_store,
+        )
+
         return model
 
-    async def concurrent_load_starting_model(self, config: bt.config,
-                                             metagraph: bt.metagraph,
-                                             metadata_store: ModelMetadataStore,
-                                             remote_model_store: RemoteModelStore,):
-        return await self.load_starting_model(config, metagraph, metadata_store, remote_model_store)
+    async def init_model(self):
+        # Create a unique run id for this run.
+        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        model_dir = taonet.mining.model_path(
+            self.config.model_dir, run_id)
+        os.makedirs(model_dir, exist_ok=True)
+
+        # Init model.
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()
+        model: PreTrainedModel = await self.load_starting_model(
+            self.config, self.metagraph, metadata_store, remote_store
+        )
+        bt.logging.success(f"Saving model to path: {model_dir}.")
+        taonet.mining.save(model, model_dir)
+
+        model = model.train()
+        model = model.to(self.config.device)
+
+
+
+    async def concurrent_init_model(self, ):
+        return await self.init_model()
 
     def run(self):
         """
@@ -202,24 +229,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         bt.logging.info(f"Validator starting at block: {self.block}")
 
-        # Create a unique run id for this run.
-        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        model_dir = taonet.validation.model_path(
-            self.config.neuron.model_dir, run_id)
-        os.makedirs(model_dir, exist_ok=True)
-
-        # Init model.
-        metadata_store = ChainModelMetadataStore(
-            self.subtensor, self.wallet, self.config.netuid)
-        remote_store = HuggingFaceModelStore()
-        model: PreTrainedModel = self.loop.run_until_complete(self.concurrent_load_starting_model(
-            self.config, self.metagraph, metadata_store, remote_store
-        ))
-        model = model.train()
-        model = model.to(self.config.device)
-
-        bt.logging.success(f"Saving model to path: {model_dir}.")
-        taonet.validation.save(model, model_dir)
+        # self.loop.run_until_complete(self.concurrent_init_model())
 
         # This loop maintains the validator's operations until intentionally stopped.
         try:

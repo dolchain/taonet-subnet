@@ -27,6 +27,8 @@ from template.utils.config import check_config, add_args, config
 from template.utils.misc import ttl_get_block
 from template import __spec_version__ as spec_version
 
+from dotenv import load_dotenv
+load_dotenv()  # take environment variables from .env.
 
 class BaseNeuron(ABC):
     """
