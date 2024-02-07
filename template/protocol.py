@@ -77,12 +77,19 @@ class Dummy(bt.Synapse):
     
     
 class CallMiners(bt.Synapse):
+    # Required gpu free size to participate on training in GB
+    needed_gpu: float = -1
+    # Indicate that miner accepts to work
     will_work: bool = False
     def deserialize(self) -> bool:
         return self.will_work
 
 class StartMiners(bt.Synapse):
-    model_id: str = ''
+    # Peer Rank
+    peer_rank: int = -1
+    # Peer Count
+    peer_count: int = -1
+    # Indicate that miner starts working
     start_work: bool = False
     def deserialize(self) -> bool:
         return self.start_work

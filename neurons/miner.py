@@ -29,11 +29,12 @@ import taonet
 from transformers import PreTrainedModel
 from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
-from model.storage.model_metadata_store import ModelMetadataStore
+from model.storage.model_metadata_store import MoelMetadataStore
 from model.storage.remote_model_store import RemoteModelStore
 import torch
 import math
 import random
+from utilities.freegpu import get_free_gpu_memory
 
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
@@ -157,6 +158,12 @@ class Miner(BaseMinerNeuron):
     async def call_miners(
         self, synapse: template.protocol.CallMiners
     ) -> template.protocol.CallMiners:
+        # Get free gpu size
+        free_memory_list = get_free_gpu_memory()
+        # If free gpu is not available refuse the call
+        if free_memory_list[0] < synapse.needed_gpu * 1024:
+            synapse.will_work = False
+            return synapse
         # Will work if not working currently
         synapse.will_work = not self.working
         return synapse
@@ -195,7 +202,7 @@ class Miner(BaseMinerNeuron):
         # Start work if not working currently
         self.working = True
         vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
-        bt.logging.success(f'synapse from uid: {vali_uid}')
+        bt.logging.success(f'synapse from uid: {vali_uid}, {synapse.peer_rank}, {synapse.peer_count}')
 
         # Init model.
         metadata_store = ChainModelMetadataStore(
@@ -204,12 +211,12 @@ class Miner(BaseMinerNeuron):
         model: PreTrainedModel = await self.load_model_from_uid(
             vali_uid, self.config, self.metagraph, metadata_store, remote_store
         )        
-        asyncio.create_task(self.train(model, self.config.model_dir))
+        asyncio.create_task(self.train(model=model, model_dir=self.config.model_dir, rank = synapse.peer_rank, peer_count=synapse.peer_count))
 
         synapse.start_work = True
         return synapse
     
-    async def train(self, model, model_dir):
+    async def train(self, model, model_dir, rank:int, peer_count:int):
         model = model.train()
         model = model.to(self.config.device)
 
@@ -231,8 +238,9 @@ class Miner(BaseMinerNeuron):
                 bt.logging.success(
                     f"Loading {self.config.pages_per_epoch} pages for training this epoch"
                 )
+                max_pages = taonet.dataset.SubsetFalconLoader.max_pages
                 random_pages = [
-                    random.randint(1, taonet.dataset.SubsetFalconLoader.max_pages)
+                    random.randint(int(max_pages / peer_count * rank), int(max_pages / peer_count * (rank + 1)))
                     for _ in range(self.config.pages_per_epoch)
                 ]
                 loader = taonet.dataset.SubsetFalconLoader(

@@ -25,8 +25,8 @@ async def start_train(self):
         volunteer_responses = self.dendrite.query(
             # Send the query to selected miner axons in the network.
             axons=[self.metagraph.axons[uid] for uid in miner_uids],
-            # Construct a CallMiners query.
-            synapse=CallMiners(),
+            # Construct a CallMiners query. Send needed GPU size in GB
+            synapse=CallMiners(needed_gpu=7),
             # All responses have the deserialize function called on them before returning.
             # You are encouraged to define your  own deserialization function.
             deserialize=True,
@@ -38,16 +38,21 @@ async def start_train(self):
         # Choose candidates among volunteers
         volunteer_uids, candidate_uids = get_candidate_uids(self, miner_uids=miner_uids, responses=volunteer_responses, peer_count=self.config.peer_count)
                 
+        if len(candidate_uids) == 0:
+            continue
+
+        candidate_responses = []
         # Make candidate miners to start training
-        candidate_responses = self.dendrite.query(
-            # Send the query to selected miner axons in the network.
-            axons=[self.metagraph.axons[uid] for uid in candidate_uids],
-            # Construct a CallMiners query.
-            synapse=StartMiners(),
-            # All responses have the deserialize function called on them before returning.
-            # You are encouraged to define your own deserialization function.
-            deserialize=True,
-        )
+        for i, uid in enumerate(candidate_uids):
+            axon = self.metagraph.axons[uid]
+            response = self.dendrite.query(
+                axons=[self.metagraph.axons[uid]],  # Send the query to the selected axon
+                synapse=StartMiners(peer_rank=i, peer_count=len(candidate_uids)),  # Use the corresponding synapse for this axon, Assign rank
+                deserialize=True,  # Deserialize the response
+            )
+            candidate_responses.append(response)
+        bt.logging.success(f"candidate_responses: {candidate_responses}")
+
         if all(candidate_responses):
             break
 
