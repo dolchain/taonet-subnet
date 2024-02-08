@@ -27,9 +27,6 @@ from template.utils.config import check_config, add_args, config
 from template.utils.misc import ttl_get_block
 from template import __spec_version__ as spec_version
 
-from dotenv import load_dotenv
-load_dotenv()  # take environment variables from .env.
-
 class BaseNeuron(ABC):
     """
     Base class for Bittensor miners. This class is abstract and should be inherited by a subclass. It contains the core logic for all neurons; validators and miners.

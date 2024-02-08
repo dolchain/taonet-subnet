@@ -31,6 +31,13 @@ from template.validator import start_train
 # import base validator class which takes care of most of the boilerplate
 from template.base.validator import BaseValidatorNeuron
 
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env.
+
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
 
 class Validator(BaseValidatorNeuron):
     """

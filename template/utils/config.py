@@ -183,6 +183,34 @@ def add_args(cls, parser):
             help="If passed loads the model under the specified uid.",
         )
 
+        parser.add_argument(
+            "--blocks_per_epoch",
+            type=int,
+            default=50,
+            help="Number of blocks to wait before setting weights.",
+        )
+        parser.add_argument(
+            "--pages_per_eval",
+            type=int,
+            default=3,
+            help="Number of pages used to eval each step.",
+        )
+        parser.add_argument(
+            "--sample_min",
+            type=int,
+            default=1,
+            help="Number of uids to eval each step.",
+        )
+        parser.add_argument(
+            "--dont_set_weights",
+            action="store_true",
+            help="Validator does not set weights on the chain.",
+        )
+        parser.add_argument(
+            "--offline",
+            action="store_true",
+            help="Does not launch a wandb run, does not set weights, does not check that your key is registered.",
+        )
     else:
         parser.add_argument(
             "--blacklist.force_validator_permit",

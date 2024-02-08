@@ -39,6 +39,13 @@ from utilities.freegpu import get_free_gpu_memory
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
 
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env.
+
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
 
 class Miner(BaseMinerNeuron):
     """

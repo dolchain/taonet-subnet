@@ -1,6 +1,7 @@
+import os
 import functools
 import multiprocessing
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 from model.data import ModelId, ModelMetadata
 
 from model.data import ModelId
@@ -74,3 +75,35 @@ def run_in_subprocess(func: functools.partial, ttl: int, mode="fork") -> Any:
         raise Exception(f"BaseException raised in subprocess: {str(result)}")
 
     return result
+
+def get_version(filepath: str) -> Optional[int]:
+    """Loads a version from the provided filepath or None if the file does not exist.
+
+    Args:
+        filepath (str): Path to the version file."""
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            line = f.readline()
+            if line:
+                return int(line)
+            return None
+    return None
+
+
+def save_version(filepath: str, version: int):
+    """Saves a version to the provided filepath."""
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write(str(version))
+
+def move_file_if_exists(src: str, dst: str) -> bool:
+    """Moves a file from src to dst if it exists.
+
+    Returns:
+        bool: True if the file was moved, False otherwise.
+    """
+    if os.path.exists(src) and not os.path.exists(dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.replace(src, dst)
+        return True
+    return False
