@@ -198,7 +198,7 @@ def add_args(cls, parser):
         parser.add_argument(
             "--sample_min",
             type=int,
-            default=1,
+            default=10,
             help="Number of uids to eval each step.",
         )
         parser.add_argument(

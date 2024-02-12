@@ -18,7 +18,7 @@
 
 import os
 import time
-from typing import Optional
+from typing import Optional, List
 import constants
 from model.data import Model, ModelId
 from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
@@ -47,6 +47,8 @@ async def push(
     retry_delay_secs: int = 60,
     metadata_store: Optional[ModelMetadataStore] = None,
     remote_model_store: Optional[RemoteModelStore] = None,
+    uids: Optional[List[int]] = None,
+    skip_remote_upload: bool = False
 ):
     """Pushes the model to Hugging Face and publishes it on the chain for evaluation by validators.
 
@@ -58,8 +60,10 @@ async def push(
         metadata_store (Optional[ModelMetadataStore]): The metadata store. If None, defaults to writing to the
             chain.
         remote_model_store (Optional[RemoteModelStore]): The remote model store. If None, defaults to writing to HuggingFace
+        uids (Optional[List[int]]): Miners UID participating in distributed training
+        skip_remote_upload (bool): Determine to skip uploading to huggingface or not.
     """
-    bt.logging.info("Pushing model")
+    bt.logging.info(f"Pushing model{'(skip remote uploading)' if skip_remote_upload else ''}")
 
     if metadata_store is None:
         metadata_store = ChainModelMetadataStore(bt.subtensor(), wallet)
@@ -69,12 +73,13 @@ async def push(
 
     # First upload the model to HuggingFace.
     namespace, name = utils.validate_hf_repo_id(repo)
-    model_id = ModelId(namespace=namespace, name=name)
-    model_id = await remote_model_store.upload_model(Model(id=model_id, pt_model=model))
+    model_id = ModelId(namespace=namespace, name=name, uids=uids)
+    if not skip_remote_upload:
+        model_id = await remote_model_store.upload_model(Model(id=model_id, pt_model=model))
 
-    bt.logging.success(
-        f"Uploaded model to hugging face. Now committing to the chain with model_id: {model_id}"
-    )
+        bt.logging.success(
+            f"Uploaded model to hugging face. Now committing to the chain with model_id: {model_id}"
+        )
 
     # We can only commit to the chain every 20 minutes, so run this in a loop, until
     # successful.

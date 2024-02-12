@@ -1,4 +1,5 @@
-from typing import Any, ClassVar, Dict, Optional, Type
+from typing import ClassVar, Optional, Type, List
+import json
 from transformers import PreTrainedModel
 from pydantic import BaseModel, Field, PositiveInt
 
@@ -35,9 +36,12 @@ class ModelId(BaseModel):
     # Hash is filled automatically when uploading to or downloading from a remote store.
     hash: Optional[str] = Field(description="Hash of the trained model.")
 
+    # miner uids who participate on distributed learning
+    uids: Optional[List[int]] = Field(description="Uids of participating miners")
+
     def to_compressed_str(self) -> str:
         """Returns a compressed string representation."""
-        return f"{self.namespace}:{self.name}:{self.commit}:{self.hash}"
+        return f"{self.namespace}:{self.name}:{self.commit}:{self.hash}:{self.uids}"
 
     @classmethod
     def from_compressed_str(cls, cs: str) -> Type["ModelId"]:
@@ -48,6 +52,7 @@ class ModelId(BaseModel):
             name=tokens[1],
             commit=tokens[2] if tokens[2] != "None" else None,
             hash=tokens[3] if tokens[3] != "None" else None,
+            uids=json.loads(tokens[4]) if tokens[4] != "None" else None,
         )
 
 

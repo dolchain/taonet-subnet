@@ -470,11 +470,20 @@ class BaseValidatorNeuron(BaseNeuron):
         model: PreTrainedModel = await self.load_starting_model(
             self.config, self.metagraph, metadata_store, remote_store
         )
-        bt.logging.success(f"Saving model to path: {model_dir}.")
-        taonet.mining.save(model, model_dir)
+        
+        # await taonet.mining.push(
+        #     model,
+        #     self.config.hf_repo_id,
+        #     self.wallet,
+        #     metadata_store=metadata_store,
+        #     remote_model_store=remote_store,
+        #     uids= [7,8,9],
+        #     skip_remote_upload = True
+        # )
 
         model = model.train()
         model = model.to(self.config.device)
+        return model
 
     async def concurrent_init_model(self, ):
         return await self.init_model()
@@ -514,7 +523,7 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.debug(
                 "No uids to eval. Waiting 5 minutes to download some models."
             )
-            time.sleep(3)
+            time.sleep(10)
             return
 
         # Keep track of which block this uid last updated their model.
@@ -543,6 +552,8 @@ class BaseValidatorNeuron(BaseNeuron):
         load_model_perf = PerfMonitor("Eval: Load model")
         compute_loss_perf = PerfMonitor("Eval: Compute loss")
 
+        miner_uids = {}
+
         for uid_i in uids:
             bt.logging.trace(f"Computing model losses for uid:{uid_i}.")
 
@@ -553,6 +564,8 @@ class BaseValidatorNeuron(BaseNeuron):
             )
 
             losses = [math.inf for _ in batches]
+            if model_i_metadata.id.uids != None:
+                miner_uids[uid_i] = model_i_metadata.id.uids
 
             if model_i_metadata != None:
                 try:
@@ -600,16 +613,22 @@ class BaseValidatorNeuron(BaseNeuron):
         )
 
         # Compute softmaxed weights based on win rate.
-        model_weights = torch.tensor(
-            [win_rate[uid] for uid in uids], dtype=torch.float32
-        )
+        model_weights = torch.zeros_like(self.weights)
+
+        for vali_uid in miner_uids:
+            for miner_uid in miner_uids[vali_uid]:
+                model_weights[miner_uid] += win_rate[vali_uid]
         step_weights = torch.softmax(model_weights / constants.temperature, dim=0)
 
         # Update weights based on moving average.
         new_weights = torch.zeros_like(self.weights)
-        for i, uid_i in enumerate(uids):
-            new_weights[uid_i] = step_weights[i]
+        for i, model_weight in enumerate(model_weights):
+            if model_weight:
+                new_weights[i] = step_weights[i]
+
         new_weights /= new_weights.sum()
+        new_weights = new_weights.nan_to_num(0.0)
+
         self.weights = (
             constants.alpha * self.weights + (1 - constants.alpha) * new_weights
         )
