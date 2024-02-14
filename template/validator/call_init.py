@@ -62,7 +62,7 @@ async def call_init(self):
             bt.logging.success(f"peer_uids: {candidate_uids}")
             self.rank = 0
             self.peer_count = len(candidate_uids) + 1
-            self.candidate_uids = candidate_uids
+            self.participate_uids = candidate_uids
             return candidate_uids
 
     # # # TODO(developer): Define how the validator scores responses.

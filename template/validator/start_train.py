@@ -17,7 +17,7 @@ async def start_train(self):
     # Broadcast to candidate uids to start training
     participate_responses = self.dendrite.query(
         # Send the query to selected miner axons in the network.
-        axons=[self.metagraph.axons[uid] for uid in self.candidate_uids],
+        axons=[self.metagraph.axons[uid] for uid in self.participate_uids],
         # Construct a CallMiners query. Send needed GPU size in GB
         synapse=StartMiners(master_addr=self.master_addr,
                             master_port=self.master_port),

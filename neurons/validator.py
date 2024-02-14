@@ -47,7 +47,7 @@ class Validator(BaseValidatorNeuron):
         self.load_state()
 
         # TODO(developer): Anything specific to your use case you can do here
-        self.candidate_uids = []
+        self.participate_uids = []
 
     async def forward(self):
         """

@@ -117,7 +117,7 @@ class BaseMinerNeuron(BaseNeuron):
                     < self.config.neuron.epoch_length
                 ):
                     if self.status == 'ready':
-                        self.train_thread = threading.Thread(target=train.run, args=(self,), daemon=False)
+                        self.train_thread = threading.Thread(target=train.run, args=(self, '', ), daemon=False)
                         self.train_thread.start()
                         self.status = 'working'
 

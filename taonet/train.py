@@ -5,10 +5,11 @@ from datetime import timedelta
 import bittensor as bt
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import taonet
 
 from taonet.dataset import SubsetFalconLoader
 
-def run(self):
+def run(self, model_dir: str):
     
     bt.logging.trace(
         f'init processing with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
@@ -104,9 +105,10 @@ def run(self):
 
                 bt.logging.success(
                     f"New best average loss: {best_avg_loss}.")
-            
-                # # Save the model to your mining dir.
-                # bt.logging.success(f"Saving model to path: {model_dir}.")
-                # taonet.mining.save(model, model_dir)
+                
+                if model_dir != '':
+                    # Save the model to your mining dir.
+                    bt.logging.info(f"Saving model to path: {model_dir}.")
+                    taonet.mining.save(ddp_model.module, model_dir)
     finally:
         pass

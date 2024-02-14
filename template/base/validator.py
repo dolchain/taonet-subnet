@@ -450,23 +450,9 @@ class BaseValidatorNeuron(BaseNeuron):
         model = taonet.model.get_model()
         bt.logging.success(f"Training from scratch. Model={str(model)}")
 
-        await taonet.mining.push(
-            model,
-            self.config.hf_repo_id,
-            self.wallet,
-            metadata_store=metadata_store,
-            remote_model_store=remote_model_store,
-        )
-
         return model
 
     async def init_model(self):
-        # Create a unique run id for this run.
-        run_id = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        model_dir = taonet.mining.model_path(
-            self.config.model_dir, run_id)
-        os.makedirs(model_dir, exist_ok=True)
-
         # Init model.
         metadata_store = ChainModelMetadataStore(
             self.subtensor, self.wallet, self.config.netuid)
@@ -474,16 +460,6 @@ class BaseValidatorNeuron(BaseNeuron):
         model: PreTrainedModel = await self.load_starting_model(
             self.config, self.metagraph, metadata_store, remote_store
         )
-        
-        # await taonet.mining.push(
-        #     model,
-        #     self.config.hf_repo_id,
-        #     self.wallet,
-        #     metadata_store=metadata_store,
-        #     remote_model_store=remote_store,
-        #     uids= [7,8,9],
-        #     skip_remote_upload = True
-        # )
 
         model = model.train()
         model = model.to(self.config.device)
@@ -671,6 +647,7 @@ class BaseValidatorNeuron(BaseNeuron):
             losses_per_uid,
             load_model_perf.summary_str(),
             compute_loss_perf.summary_str(),
+            miner_uids,
         )
 
         # Increment the number of completed run steps by 1
@@ -687,6 +664,7 @@ class BaseValidatorNeuron(BaseNeuron):
         losses_per_uid,
         load_model_perf_str,
         compute_loss_perf_str,
+        miner_uids,
     ):
         # Build step log
         step_log = {
@@ -703,6 +681,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 "win_rate": win_rate[uid],
                 "win_total": wins[uid],
                 "weight": self.weights[uid].item(),
+                "miner_uids": miner_uids[uid] if miner_uids.__contains__(uid) else []
             }
         table = Table(title="Step")
         table.add_column("uid", justify="right", style="cyan", no_wrap=True)
@@ -710,6 +689,7 @@ class BaseValidatorNeuron(BaseNeuron):
         table.add_column("win_rate", style="magenta")
         table.add_column("win_total", style="magenta")
         table.add_column("weights", style="magenta")
+        table.add_column("miner_uids", style="magenta")
         table.add_column("block", style="magenta")
         for uid in uids:
             try:
@@ -719,6 +699,7 @@ class BaseValidatorNeuron(BaseNeuron):
                     str(round(step_log["uid_data"][str(uid)]["win_rate"], 4)),
                     str(step_log["uid_data"][str(uid)]["win_total"]),
                     str(round(self.weights[uid].item(), 4)),
+                    str(step_log["uid_data"][str(uid)]["miner_uids"]),
                     str(step_log["uid_data"][str(uid)]["block"]),
                 )
             except:
@@ -739,6 +720,41 @@ class BaseValidatorNeuron(BaseNeuron):
         # Sink step log.
         bt.logging.trace(f"Step results: {step_log}")
 
+    def push_model(self, model_dir):   
+        # Save the model to your mining dir.
+        bt.logging.info(f"Saving model to path: {model_dir}.")
+        taonet.mining.save(self.model, model_dir)
+        bt.logging.success(f"Saved model")
+
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()         
+
+        bt.logging.warning(f'Pushing training model.')    
+        self.loop.run_until_complete(taonet.mining.push(
+            self.model,
+            self.config.hf_repo_id,
+            self.wallet,
+            metadata_store=metadata_store,
+            remote_model_store=remote_store,
+            uids = self.participate_uids,
+        ))
+        bt.logging.success(f'Pushed model')
+        
+        while True:
+            # Push model every 20 min
+            time.sleep(1200)
+            # Load a model from a local directory.    
+            model = taonet.mining.load_local_model(model_dir)         
+            self.loop.run_until_complete(taonet.mining.push(
+                self.model,
+                self.config.hf_repo_id,
+                self.wallet,
+                metadata_store=metadata_store,
+                remote_model_store=remote_store,
+                uids = self.participate_uids,
+            ))
+            bt.logging.success(f'Pushed model')
 
     def run(self):
         """
@@ -779,10 +795,17 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.master_addr = self.axon.external_ip
                 self.master_port = utils.get_unused_port(self.config.port.range)
 
-                self.train_thread = threading.Thread(target = taonet.train.run, args=(self,), daemon=False)
-                self.train_thread.start()
-                bt.logging.success('next line')
+                # Create a unique run id for this run.
+                run_id = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                model_dir = taonet.mining.model_path(
+                    self.config.model_dir, run_id)
+                os.makedirs(model_dir, exist_ok=True)
 
+                self.train_thread = threading.Thread(target = taonet.train.run, args=(self, model_dir, ), daemon=False)
+                self.train_thread.start()
+
+                self.push_model_thread = threading.Thread(target = self.push_model, args=(model_dir, ), daemon=False)
+                self.push_model_thread.start()
                 is_started = self.loop.run_until_complete(self.concurrent_start_train())
                 if is_started:
                     break
