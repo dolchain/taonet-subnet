@@ -116,6 +116,30 @@ def add_args(cls, parser):
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="The device on which to run. cpu or cuda",
     )
+    parser.add_argument ( 
+        '--port.range', 
+        type = str, 
+        default = '45572:45580', 
+        help = "Master Port range" )
+    parser.add_argument("--lr", type=float, default=0.00001, help="Learning rate.")
+    parser.add_argument(
+        "--bs", type=int, default=constants.batch_size, help="Batch size"
+    )
+    parser.add_argument(
+        "--sl", type=int, default=constants.sequence_length, help="Sequence length"
+    )            
+    parser.add_argument(
+        "--accumulation_steps",
+        type=int,
+        default=5,
+        help="The number of training accumulation steps.",
+    )
+    parser.add_argument(
+        "--pages_per_epoch",
+        type=int,
+        default=10,
+        help="Number of pages trained on per epoch",
+    )
 
     if neuron_type == "validator":
         parser.add_argument(
@@ -166,7 +190,7 @@ def add_args(cls, parser):
         parser.add_argument(
             "--peer_count",
             type=int,
-            default=3,
+            default=4,
             help="The number of raining peers(miners)",
         )
             
@@ -226,25 +250,6 @@ def add_args(cls, parser):
             default=False,
         )
 
-        parser.add_argument("--lr", type=float, default=0.00001, help="Learning rate.")
-        parser.add_argument(
-            "--bs", type=int, default=constants.batch_size, help="Batch size"
-        )
-        parser.add_argument(
-            "--sl", type=int, default=constants.sequence_length, help="Sequence length"
-        )            
-        parser.add_argument(
-            "--accumulation_steps",
-            type=int,
-            default=5,
-            help="The number of training accumulation steps.",
-        )
-        parser.add_argument(
-            "--pages_per_epoch",
-            type=int,
-            default=10,
-            help="Number of pages trained on per epoch",
-        )
 
 def config(cls):
     """

@@ -17,8 +17,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
 import time
-import asyncio
 import typing
 import bittensor as bt
 
@@ -29,23 +29,13 @@ import taonet
 from transformers import PreTrainedModel
 from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
-from model.storage.model_metadata_store import MoelMetadataStore
+from model.storage.model_metadata_store import ModelMetadataStore
 from model.storage.remote_model_store import RemoteModelStore
-import torch
-import math
-import random
 from utilities.freegpu import get_free_gpu_memory
+
 
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
-
-from dotenv import load_dotenv
-
-load_dotenv()  # take environment variables from .env.
-
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
-
 
 class Miner(BaseMinerNeuron):
     """
@@ -63,6 +53,7 @@ class Miner(BaseMinerNeuron):
 
         # Indicates if miner is working currently
         self.working = False
+        self.status = 'wait'
 
     async def forward(
         self, synapse: template.protocol.Dummy
@@ -175,134 +166,64 @@ class Miner(BaseMinerNeuron):
         synapse.will_work = not self.working
         return synapse
 
-    async def blacklist_call_start_miners(
-        self, synapse: bt.Synapse
-    ) -> typing.Tuple[bool, str]:
-        # TODO(developer): Define how miners should blacklist requests.
-        if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
-            # Ignore requests from unrecognized entities.
-            bt.logging.trace(
-                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
-            )
-            return True, "Unrecognized hotkey"
-
-        bt.logging.trace(
-            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
-        )
-        # Blacklist synapse if currently working.
-        return self.working, f"Hotkey recognized! {'But working' if self.working else 'and can work'}"
-
     async def blacklist_call_miners(
         self, synapse: template.protocol.CallMiners
     ) -> typing.Tuple[bool, str]:
-        return await self.blacklist_call_start_miners(synapse)
+        return await self.blacklist(synapse)
+    
+    async def blacklist_init_miners(
+        self, synapse: template.protocol.InitMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
 
     async def blacklist_start_miners(
         self, synapse: template.protocol.StartMiners
     ) -> typing.Tuple[bool, str]:
-        return await self.blacklist_call_start_miners(synapse)
+        return await self.blacklist(synapse)
+
+    # Process income InitMiners Synapse
+    async def init_miners(
+        self, synapse: template.protocol.InitMiners
+    ) -> template.protocol.InitMiners:
+        # Start work if not working currently
+        vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        bt.logging.info(
+            f'synapse from uid: {vali_uid}, {synapse.peer_rank}, {synapse.peer_count}')
+        bt.logging.trace(
+            f'loading model')
+
+        # Load model.
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()
+        self.model: PreTrainedModel = await self.load_model_from_uid(
+            vali_uid, self.config, self.metagraph, metadata_store, remote_store
+        )
+        bt.logging.trace(
+            f'loaded model')
+
+        self.rank = synapse.peer_rank
+        self.peer_count = synapse.peer_count
+
+        synapse.ready_to_work = True
+        return synapse
 
     # Process income StartMiners Synapse
     async def start_miners(
         self, synapse: template.protocol.StartMiners
     ) -> template.protocol.StartMiners:
         # Start work if not working currently
-        self.working = True
         vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
-        bt.logging.success(f'synapse from uid: {vali_uid}, {synapse.peer_rank}, {synapse.peer_count}')
-
-        # Init model.
-        metadata_store = ChainModelMetadataStore(
-            self.subtensor, self.wallet, self.config.netuid)
-        remote_store = HuggingFaceModelStore()
-        model: PreTrainedModel = await self.load_model_from_uid(
-            vali_uid, self.config, self.metagraph, metadata_store, remote_store
-        )        
-        asyncio.create_task(self.train(model=model, model_dir=self.config.model_dir, rank = synapse.peer_rank, peer_count=synapse.peer_count))
+        bt.logging.info(
+            f'synapse from uid: {vali_uid}, {synapse.master_addr}, {synapse.master_port}')
+        
+        self.master_addr = synapse.master_addr
+        self.master_port = synapse.master_port
+        self.working = True
+        self.status = 'ready'
 
         synapse.start_work = True
         return synapse
-    
-    async def train(self, model, model_dir, rank:int, peer_count:int):
-        model = model.train()
-        model = model.to(self.config.device)
-
-        # Build optimizer
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=0.01)
-
-        # Start the training loop
-        epoch_step = 0
-        global_step = 0
-        n_acc_steps = 0
-        best_avg_loss = math.inf
-        accumulation_steps = self.config.accumulation_steps
-        try:
-            while True:
-                # Initialize loss accumulator for the epoch
-                epoch_loss = 0.0
-
-                # Prepare the data loader with random pages for each epoch
-                bt.logging.success(
-                    f"Loading {self.config.pages_per_epoch} pages for training this epoch"
-                )
-                max_pages = taonet.dataset.SubsetFalconLoader.max_pages
-                random_pages = [
-                    random.randint(int(max_pages / peer_count * rank), int(max_pages / peer_count * (rank + 1)))
-                    for _ in range(self.config.pages_per_epoch)
-                ]
-                loader = taonet.dataset.SubsetFalconLoader(
-                    batch_size=self.config.bs, sequence_length=self.config.sl, pages=random_pages
-                )
-
-                # Enumerate over the data loader
-                n_batches = 0
-                optimizer.zero_grad()  # Initialize gradients to zero
-
-                for i, batch in enumerate(loader):
-                    # Move the input batch to the device
-                    inputs = batch.to(model.device)
-
-                    # Forward pass: compute the model output and loss
-                    outputs = model(inputs, labels=inputs)
-
-                    loss = outputs.loss / accumulation_steps  # Scale loss
-                    loss.backward()  # Accumulate gradients
-
-                    if (i + 1) % accumulation_steps == 0:
-                        n_acc_steps += 1
-
-                        # GRADIENT SHARE
-
-                        optimizer.step()  # Perform a single optimization step
-                        optimizer.zero_grad()  # Clear gradients
-                        bt.logging.success(
-                            f"Step: {n_acc_steps} loss: {outputs.loss.detach().item()}"
-                        )
-               
-                    torch.cuda.empty_cache()
-
-                    n_batches += 1
-                    global_step += 1
-                    epoch_loss += outputs.loss.detach().item()
-
-                # Calculate the average loss for the epoch
-                avg_loss = epoch_loss / n_batches
-
-                # Log the average loss for the epoch
-                bt.logging.success(f"Epoch: {epoch_step} average loss: {avg_loss}")
-                epoch_step += 1
-
-                # Check if the average loss of this epoch is the best we've seen so far
-                if avg_loss < best_avg_loss:
-                    best_avg_loss = avg_loss  # Update the best average loss
-
-                    bt.logging.success(f"New best average loss: {best_avg_loss}.")
-
-                    # # Save the model to your mining dir.
-                    # bt.logging.success(f"Saving model to path: {model_dir}.")
-                    # taonet.mining.save(model, model_dir)
-        finally:
-            pass
 
 
     async def load_model_from_uid(
@@ -333,5 +254,5 @@ class Miner(BaseMinerNeuron):
 if __name__ == "__main__":
     with Miner() as miner:
         while True:
-            bt.logging.info("Miner running...", time.time())
+            # bt.logging.info("Miner running...", time.time())
             time.sleep(30)

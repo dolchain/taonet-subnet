@@ -84,11 +84,21 @@ class CallMiners(bt.Synapse):
     def deserialize(self) -> bool:
         return self.will_work
 
-class StartMiners(bt.Synapse):
+class InitMiners(bt.Synapse):
     # Peer Rank
     peer_rank: int = -1
     # Peer Count
     peer_count: int = -1
+    # Indicate that miner starts working
+    ready_to_work: bool = False
+    def deserialize(self) -> bool:
+        return self.ready_to_work
+
+class StartMiners(bt.Synapse):
+    # Master Address
+    master_addr: str = '0.0.0.0'
+    # Master Port
+    master_port: int = -1
     # Indicate that miner starts working
     start_work: bool = False
     def deserialize(self) -> bool:

@@ -3,8 +3,8 @@ import functools
 import multiprocessing
 from typing import Any, Optional, Tuple
 from model.data import ModelId, ModelMetadata
-
-from model.data import ModelId
+import socket
+import random
 
 
 def validate_hf_repo_id(repo_id: str) -> Tuple[str, str]:
@@ -107,3 +107,29 @@ def move_file_if_exists(src: str, dst: str) -> bool:
         os.replace(src, dst)
         return True
     return False
+
+
+def get_unused_port(port_range: str):
+    """
+    Finds an unused port within a specified range.
+
+    Args:
+        port_range (str): Port Range 45571:45580
+
+    Returns:
+        int: An unused port number within the specified range.
+
+    Raises:
+        Exception: If no unused port is found.
+    """
+    start_port, end_port = (int(port) for port in port_range.split(':'))
+    unused_ports = []
+    for port in range(start_port, end_port + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            res = s.connect_ex(('localhost', port))
+            if res != 0:
+                unused_ports.append(port)
+    if len(unused_ports) == 0:
+        raise Exception("No unused ports found")
+    #  select random port in unused ports
+    return unused_ports[random.randint(0, len(unused_ports) - 1)]

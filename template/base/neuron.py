@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import copy
+import os
 import typing
 
 import bittensor as bt
@@ -26,6 +27,10 @@ from abc import ABC, abstractmethod
 from template.utils.config import check_config, add_args, config
 from template.utils.misc import ttl_get_block
 from template import __spec_version__ as spec_version
+from dotenv import load_dotenv
+load_dotenv()  # take environment variables from .env.
+
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 class BaseNeuron(ABC):
     """
@@ -97,6 +102,12 @@ class BaseNeuron(ABC):
             f"Running neuron on subnet: {self.config.netuid} with uid {self.uid} using network: {self.subtensor.chain_endpoint}"
         )
         self.step = 0
+
+        self.rank = -1
+        self.peer_count = -1
+        self.master_addr = '0.0.0.0'
+        self.master_port = -1
+        self.model = None
 
     @abstractmethod
     async def forward(self, synapse: bt.Synapse) -> bt.Synapse:

@@ -385,12 +385,16 @@ class BaseValidatorNeuron(BaseNeuron):
         ]
         await asyncio.gather(*coroutines)
 
+    async def concurrent_call_init(self):
+        return await self.call_init()
+    
     async def concurrent_start_train(self):
-        coroutines = [
-            self.start_train()
-            for _ in range(self.config.neuron.num_concurrent_forwards)
-        ]
-        return await asyncio.gather(*coroutines)
+        # coroutines = [
+        #     self.call_init()
+        #     for _ in range(self.config.neuron.num_concurrent_forwards)
+        # ]
+        # return await asyncio.gather(*coroutines)
+        return await self.start_train()
 
     async def load_starting_model(
         self,
@@ -765,13 +769,25 @@ class BaseValidatorNeuron(BaseNeuron):
 
         bt.logging.info(f"Validator starting at block: {self.block}")
 
-        # self.loop.run_until_complete(self.concurrent_init_model())
-
         # This loop maintains the validator's operations until intentionally stopped.
         try:
-            # self.loop.run_until_complete(self.concurrent_start_train())
+            self.model = self.loop.run_until_complete(self.concurrent_init_model())
 
             while True:
+                self.loop.run_until_complete(self.concurrent_call_init())
+
+                self.master_addr = self.axon.external_ip
+                self.master_port = utils.get_unused_port(self.config.port.range)
+
+                self.train_thread = threading.Thread(target = taonet.train.run, args=(self,), daemon=False)
+                self.train_thread.start()
+                bt.logging.success('next line')
+
+                is_started = self.loop.run_until_complete(self.concurrent_start_train())
+                if is_started:
+                    break
+
+            while True: 
                 while (
                     self.metagraph.block.item() - self.last_epoch
                     < self.config.blocks_per_epoch

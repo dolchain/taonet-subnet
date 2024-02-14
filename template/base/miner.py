@@ -24,7 +24,7 @@ import traceback
 import bittensor as bt
 
 from template.base.neuron import BaseNeuron
-
+from taonet import train
 
 class BaseMinerNeuron(BaseNeuron):
     """
@@ -56,6 +56,9 @@ class BaseMinerNeuron(BaseNeuron):
         ).attach(
             forward_fn=self.call_miners,
             blacklist_fn=self.blacklist_call_miners,
+        ).attach(
+            forward_fn=self.init_miners,
+            blacklist_fn=self.blacklist_init_miners,
         ).attach(
             forward_fn=self.start_miners,
             blacklist_fn=self.blacklist_start_miners,
@@ -113,6 +116,11 @@ class BaseMinerNeuron(BaseNeuron):
                     self.block - self.metagraph.last_update[self.uid]
                     < self.config.neuron.epoch_length
                 ):
+                    if self.status == 'ready':
+                        self.train_thread = threading.Thread(target=train.run, args=(self,), daemon=False)
+                        self.train_thread.start()
+                        self.status = 'working'
+
                     # Wait before checking again.
                     time.sleep(1)
 

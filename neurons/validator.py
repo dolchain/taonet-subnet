@@ -26,18 +26,10 @@ import bittensor as bt
 # Bittensor Validator Template:
 import template
 from template.validator import forward
-from template.validator import start_train
+from template.validator import call_init, start_train
 
 # import base validator class which takes care of most of the boilerplate
 from template.base.validator import BaseValidatorNeuron
-
-from dotenv import load_dotenv
-
-load_dotenv()  # take environment variables from .env.
-
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
-
 
 class Validator(BaseValidatorNeuron):
     """
@@ -55,6 +47,7 @@ class Validator(BaseValidatorNeuron):
         self.load_state()
 
         # TODO(developer): Anything specific to your use case you can do here
+        self.candidate_uids = []
 
     async def forward(self):
         """
@@ -68,6 +61,9 @@ class Validator(BaseValidatorNeuron):
         # TODO(developer): Rewrite this function based on your protocol definition.
         return await forward(self)
 
+    async def call_init(self):
+        return await call_init(self)
+    
     async def start_train(self):
         return await start_train(self)
 

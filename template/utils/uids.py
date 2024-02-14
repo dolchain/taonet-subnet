@@ -87,5 +87,5 @@ def get_candidate_uids(
 ) -> torch.LongTensor:
     # Querry the uids which response is True
     volunteer_uids = [uid for uid, response in zip(miner_uids, responses) if response]
-    return volunteer_uids, volunteer_uids[:peer_count] if peer_count < len(volunteer_uids) else volunteer_uids
+    return volunteer_uids, volunteer_uids[:peer_count - 1] if peer_count - 1 < len(volunteer_uids) else volunteer_uids
 
