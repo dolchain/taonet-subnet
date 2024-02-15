@@ -47,6 +47,7 @@ class Validator(BaseValidatorNeuron):
         self.load_state()
 
         # TODO(developer): Anything specific to your use case you can do here
+        # Miners Uid participating in distributed learning
         self.participate_uids = []
 
     async def forward(self):

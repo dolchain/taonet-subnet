@@ -119,7 +119,11 @@ class BaseMinerNeuron(BaseNeuron):
                     if self.status == 'ready':
                         self.train_thread = threading.Thread(target=train.run, args=(self, '', ), daemon=False)
                         self.train_thread.start()
+                        self.isTuring = True
                         self.status = 'working'
+
+                    if not self.isTuring:
+                        self.status = 'waiting'
 
                     # Wait before checking again.
                     time.sleep(1)

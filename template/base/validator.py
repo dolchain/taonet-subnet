@@ -212,7 +212,7 @@ class BaseValidatorNeuron(BaseNeuron):
     def save_state(self):
         """Saves the state of the validator to a file."""
 
-        bt.logging.trace("Saving validator state.")
+        bt.logging.trace("Saivng validator state.")
         if not os.path.exists(self.state_path()):
             os.makedirs(self.state_path())
 
@@ -248,7 +248,7 @@ class BaseValidatorNeuron(BaseNeuron):
                     bt.logging.info(
                         f"Update loop: Already 20 synced models pending eval. Checking again in 5 minutes."
                     )
-                    time.sleep(300)
+                    time.sleep(30) # time.sleep(300)
                     # Check to see if the pending uids have been cleared yet.
                     with self.pending_uids_to_eval_lock:
                         pending_uid_count = len(self.pending_uids_to_eval)
@@ -503,7 +503,7 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.debug(
                 "No uids to eval. Waiting 5 minutes to download some models."
             )
-            time.sleep(10)
+            time.sleep(10) # time.sleep(300)
             return
 
         # Keep track of which block this uid last updated their model.
@@ -737,13 +737,13 @@ class BaseValidatorNeuron(BaseNeuron):
             self.wallet,
             metadata_store=metadata_store,
             remote_model_store=remote_store,
-            uids = self.participate_uids,
+            uids = self.participate_uids if self.isTuring else [],
         ))
         bt.logging.success(f'Pushed model')
         
         while True:
             # Push model every 20 min
-            time.sleep(1200)
+            time.sleep(60) # time.sleep(1200)
             # Load a model from a local directory.    
             model = taonet.mining.load_local_model(model_dir)         
             self.loop.run_until_complete(taonet.mining.push(
@@ -752,7 +752,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.wallet,
                 metadata_store=metadata_store,
                 remote_model_store=remote_store,
-                uids = self.participate_uids,
+                uids = self.participate_uids if self.isTuring else [],
             ))
             bt.logging.success(f'Pushed model')
 
@@ -858,7 +858,7 @@ class BaseValidatorNeuron(BaseNeuron):
         async def _try_set_weights():
             try:
                 self.weights.nan_to_num(0.0)
-                self.subtensor.set_weights(
+                result = self.subtensor.set_weights(
                     netuid=self.config.netuid,
                     wallet=self.wallet,
                     uids=self.metagraph.uids,
@@ -866,6 +866,10 @@ class BaseValidatorNeuron(BaseNeuron):
                     wait_for_inclusion=False,
                     version_key=constants.weights_version_key,
                 )
+                if result:
+                    bt.logging.info("set_weights on chain successfully!")
+                else:
+                    bt.logging.error("set_weights failed")
             except:
                 pass
             ws, ui = self.weights.topk(len(self.weights))

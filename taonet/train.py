@@ -8,40 +8,41 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import taonet
 
 from taonet.dataset import SubsetFalconLoader
+from traceback import print_exception
 
 def run(self, model_dir: str):
-    
-    bt.logging.trace(
-        f'init processing with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
-
-    # Init process group
-    dist.init_process_group(
-        init_method=f"tcp://{self.master_addr}:{self.master_port}",
-        backend='gloo',
-        rank=self.rank,
-        world_size=self.peer_count,
-        timeout=timedelta(seconds=60)
-    )
-    bt.logging.trace(
-        f'init processed')
-    
-    self.model = self.model.train()
-    self.model = self.model.to(self.config.device)
-
-    # build DistributedDataParallel Model
-    ddp_model = DDP(self.model, device_ids=[0])
-
-    # Build optimizer
-    optimizer = torch.optim.AdamW(
-        ddp_model.parameters(), lr=self.config.lr, weight_decay=0.01)
-
-    # Start the training loop
-    epoch_step = 0
-    global_step = 0
-    n_acc_steps = 0
-    best_avg_loss = math.inf
-    accumulation_steps = self.config.accumulation_steps
     try:
+        bt.logging.trace(
+            f'init processing with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
+
+        # Init process group
+        dist.init_process_group(
+            init_method=f"tcp://{self.master_addr}:{self.master_port}",
+            backend='gloo',
+            rank=self.rank,
+            world_size=self.peer_count,
+            timeout=timedelta(seconds=60)
+        )
+        bt.logging.trace(
+            f'init processed')
+        
+        self.model = self.model.train()
+        self.model = self.model.to(self.config.device)
+
+        # build DistributedDataParallel Model
+        ddp_model = DDP(self.model, device_ids=[0])
+
+        # Build optimizer
+        optimizer = torch.optim.AdamW(
+            ddp_model.parameters(), lr=self.config.lr, weight_decay=0.01)
+
+        # Start the training loop
+        epoch_step = 0
+        global_step = 0
+        n_acc_steps = 0
+        best_avg_loss = math.inf
+        accumulation_steps = self.config.accumulation_steps
+
         while True:
             # Initialize loss accumulator for the epoch
             epoch_loss = 0.0
@@ -99,6 +100,8 @@ def run(self, model_dir: str):
                 f"Epoch: {epoch_step} average loss: {avg_loss}")
             epoch_step += 1
 
+            self.isTuring = True
+
             # Check if the average loss of this epoch is the best we've seen so far
             if avg_loss < best_avg_loss:
                 best_avg_loss = avg_loss  # Update the best average loss
@@ -106,9 +109,18 @@ def run(self, model_dir: str):
                 bt.logging.success(
                     f"New best average loss: {best_avg_loss}.")
                 
+                # If model_dir is specified save the model
                 if model_dir != '':
                     # Save the model to your mining dir.
                     bt.logging.info(f"Saving model to path: {model_dir}.")
                     taonet.mining.save(ddp_model.module, model_dir)
+
+    except Exception as err:
+        bt.logging.error("Error during training", str(err))
+        bt.logging.debug(
+            print_exception(type(err), err, err.__traceback__)
+        )
+        dist.destroy_process_group()
+        self.isTuring = False
     finally:
         pass

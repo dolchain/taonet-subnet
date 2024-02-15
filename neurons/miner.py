@@ -51,9 +51,13 @@ class Miner(BaseMinerNeuron):
 
         # TODO(developer): Anything specific to your use case you can do here
 
-        # Indicates if miner is working currently
-        self.working = False
-        self.status = 'wait'
+        # Indicates if miner status
+        """
+        waiting: Waiting for validator's call (could be ready when connection to vali is established)
+        ready: Ready to work (could be working when turing is started)
+        working: Working currently (could be waiting when turing is stopped)
+        """
+        self.status = 'waiting'
 
     async def forward(
         self, synapse: template.protocol.Dummy
@@ -152,20 +156,6 @@ class Miner(BaseMinerNeuron):
         )
         return prirority
 
-    # Process income CallMiners Synapse
-    async def call_miners(
-        self, synapse: template.protocol.CallMiners
-    ) -> template.protocol.CallMiners:
-        # Get free gpu size
-        free_memory_list = get_free_gpu_memory()
-        # If free gpu is not available refuse the call
-        if free_memory_list[0] < synapse.needed_gpu * 1024:
-            synapse.will_work = False
-            return synapse
-        # Will work if not working currently
-        synapse.will_work = not self.working
-        return synapse
-
     async def blacklist_call_miners(
         self, synapse: template.protocol.CallMiners
     ) -> typing.Tuple[bool, str]:
@@ -180,6 +170,20 @@ class Miner(BaseMinerNeuron):
         self, synapse: template.protocol.StartMiners
     ) -> typing.Tuple[bool, str]:
         return await self.blacklist(synapse)
+    
+    # Process income CallMiners Synapse
+    async def call_miners(
+        self, synapse: template.protocol.CallMiners
+    ) -> template.protocol.CallMiners:
+        # Get free gpu size
+        free_memory_list = get_free_gpu_memory()
+        # If free gpu is not available refuse the call
+        if free_memory_list[0] < synapse.needed_gpu * 1024:
+            synapse.will_work = False
+            return synapse
+        # Will work if not working currently
+        synapse.will_work = True
+        return synapse
 
     # Process income InitMiners Synapse
     async def init_miners(
@@ -219,7 +223,6 @@ class Miner(BaseMinerNeuron):
         
         self.master_addr = synapse.master_addr
         self.master_port = synapse.master_port
-        self.working = True
         self.status = 'ready'
 
         synapse.start_work = True

@@ -103,11 +103,14 @@ class BaseNeuron(ABC):
         )
         self.step = 0
 
+        # Custom variables
         self.rank = -1
         self.peer_count = -1
         self.master_addr = '0.0.0.0'
         self.master_port = -1
         self.model = None
+        # Indiciate if distributed learning is on progress
+        self.isTuring = False
 
     @abstractmethod
     async def forward(self, synapse: bt.Synapse) -> bt.Synapse:
@@ -168,9 +171,10 @@ class BaseNeuron(ABC):
         ) > self.config.neuron.epoch_length
 
     def save_state(self):
-        bt.logging.warning(
-            "save_state() not implemented for this neuron. You can implement this function to save model checkpoints or other useful data."
-        )
+        pass
+        # bt.logging.warning(
+        #     "save_state() not implemented for this neuron. You can implement this function to save model checkpoints or other useful data."
+        # )
 
     def load_state(self):
         bt.logging.warning(
