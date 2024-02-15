@@ -21,6 +21,7 @@ import torch
 import argparse
 import bittensor as bt
 from loguru import logger
+import constants
 
 
 def check_config(cls, config: "bt.Config"):
@@ -101,6 +102,44 @@ def add_args(cls, parser):
         help="If set, we dont save events to a log file.",
         default=False,
     )
+    
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default=os.path.join(constants.ROOT_DIR, "local-models/"),
+        help="Where to download/save models for training",
+    )
+    
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="The device on which to run. cpu or cuda",
+    )
+    parser.add_argument ( 
+        '--port.range', 
+        type = str, 
+        default = '45572:45580', 
+        help = "Master Port range" )
+    parser.add_argument("--lr", type=float, default=0.00001, help="Learning rate.")
+    parser.add_argument(
+        "--bs", type=int, default=constants.batch_size, help="Batch size"
+    )
+    parser.add_argument(
+        "--sl", type=int, default=constants.sequence_length, help="Sequence length"
+    )            
+    parser.add_argument(
+        "--accumulation_steps",
+        type=int,
+        default=5,
+        help="The number of training accumulation steps.",
+    )
+    parser.add_argument(
+        "--pages_per_epoch",
+        type=int,
+        default=1, # default=10,
+        help="Number of pages trained on per epoch",
+    )
 
     if neuron_type == "validator":
         parser.add_argument(
@@ -114,7 +153,7 @@ def add_args(cls, parser):
             "--neuron.sample_size",
             type=int,
             help="The number of miners to query in a single step.",
-            default=10,
+            default=3,
         )
 
         parser.add_argument(
@@ -148,6 +187,54 @@ def add_args(cls, parser):
             default=4096,
         )
 
+        parser.add_argument(
+            "--peer_count",
+            type=int,
+            default=3,
+            help="The number of raining peers(miners)",
+        )
+            
+        parser.add_argument(
+            "--hf_repo_id",
+            type=str,
+            help="The hugging face repo id, which should include the org or user and repo name. E.g. jdoe/finetuned",
+        )
+
+        parser.add_argument(
+            "--load_uid",
+            type=int,
+            default=None,
+            help="If passed loads the model under the specified uid.",
+        )
+
+        parser.add_argument(
+            "--blocks_per_epoch",
+            type=int,
+            default=5, # default=50,
+            help="Number of blocks to wait before setting weights.",
+        )
+        parser.add_argument(
+            "--pages_per_eval",
+            type=int,
+            default=3,
+            help="Number of pages used to eval each step.",
+        )
+        parser.add_argument(
+            "--sample_min",
+            type=int,
+            default=10,
+            help="Number of uids to eval each step.",
+        )
+        parser.add_argument(
+            "--dont_set_weights",
+            action="store_true",
+            help="Validator does not set weights on the chain.",
+        )
+        parser.add_argument(
+            "--offline",
+            action="store_true",
+            help="Does not launch a wandb run, does not set weights, does not check that your key is registered.",
+        )
     else:
         parser.add_argument(
             "--blacklist.force_validator_permit",

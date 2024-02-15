@@ -17,6 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
 import time
 import typing
 import bittensor as bt
@@ -24,9 +25,17 @@ import bittensor as bt
 # Bittensor Miner Template:
 import template
 
+import taonet
+from transformers import PreTrainedModel
+from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
+from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
+from model.storage.model_metadata_store import ModelMetadataStore
+from model.storage.remote_model_store import RemoteModelStore
+from utilities.freegpu import get_free_gpu_memory
+
+
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
-
 
 class Miner(BaseMinerNeuron):
     """
@@ -41,6 +50,14 @@ class Miner(BaseMinerNeuron):
         super(Miner, self).__init__(config=config)
 
         # TODO(developer): Anything specific to your use case you can do here
+
+        # Indicates if miner status
+        """
+        waiting: Waiting for validator's call (could be ready when connection to vali is established)
+        ready: Ready to work (could be working when turing is started)
+        working: Working currently (could be waiting when turing is stopped)
+        """
+        self.status = 'waiting'
 
     async def forward(
         self, synapse: template.protocol.Dummy
@@ -150,10 +167,106 @@ class Miner(BaseMinerNeuron):
         )
         return prirority
 
+    async def blacklist_call_miners(
+        self, synapse: template.protocol.CallMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
+    
+    async def blacklist_init_miners(
+        self, synapse: template.protocol.InitMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
+
+    async def blacklist_start_miners(
+        self, synapse: template.protocol.StartMiners
+    ) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
+    
+    # Process income CallMiners Synapse
+    async def call_miners(
+        self, synapse: template.protocol.CallMiners
+    ) -> template.protocol.CallMiners:
+        # Get free gpu size
+        free_memory_list = get_free_gpu_memory()
+        # If free gpu is not available refuse the call
+        if free_memory_list[0] < synapse.needed_gpu * 1024 or self.status != 'waiting':
+            synapse.will_work = False
+            return synapse
+        # Will work if not working currently
+        synapse.will_work = True
+        return synapse
+
+    # Process income InitMiners Synapse
+    async def init_miners(
+        self, synapse: template.protocol.InitMiners
+    ) -> template.protocol.InitMiners:
+        # Start work if not working currently
+        vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        bt.logging.info(
+            f'synapse from uid: {vali_uid}, {synapse.peer_rank}, {synapse.peer_count}')
+        bt.logging.trace(
+            f'loading model')
+
+        # Load model.
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()
+        self.model: PreTrainedModel = await self.load_model_from_uid(
+            vali_uid, self.config, self.metagraph, metadata_store, remote_store
+        )
+        bt.logging.trace(
+            f'loaded model')
+
+        self.rank = synapse.peer_rank
+        self.peer_count = synapse.peer_count
+
+        synapse.ready_to_work = True
+        return synapse
+
+    # Process income StartMiners Synapse
+    async def start_miners(
+        self, synapse: template.protocol.StartMiners
+    ) -> template.protocol.StartMiners:
+        # Start work if not working currently
+        vali_uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        bt.logging.info(
+            f'synapse from uid: {vali_uid}, {synapse.master_addr}, {synapse.master_port}')
+        
+        self.master_addr = synapse.master_addr
+        self.master_port = synapse.master_port
+        self.status = 'ready'
+
+        synapse.start_work = True
+        return synapse
+
+
+    async def load_model_from_uid(
+        self,
+        vali_uid: int,
+        config: bt.config,
+        metagraph: bt.metagraph,
+        metadata_store: ModelMetadataStore,
+        remote_model_store: RemoteModelStore,
+    ) -> PreTrainedModel:
+
+        # Initialize the model based on a passed uid.
+        # Sync the state from the passed uid.
+        model = await taonet.mining.load_remote_model(
+            vali_uid,
+            config.model_dir,
+            metagraph,
+            metadata_store,
+            remote_model_store,
+        )
+        bt.logging.success(
+            f"Training with model from uid: {config.load_uid}. Model={str(model)}"
+        )
+        return model
+
 
 # This is the main function, which runs the miner.
 if __name__ == "__main__":
     with Miner() as miner:
         while True:
-            bt.logging.info("Miner running...", time.time())
-            time.sleep(5)
+            # bt.logging.info("Miner running...", time.time())
+            time.sleep(30)

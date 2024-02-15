@@ -61,3 +61,31 @@ def get_random_uids(
         )
     uids = torch.tensor(random.sample(available_uids, k))
     return uids
+
+
+def get_all_uids(
+    self, k: int, exclude: List[int] = None
+) -> torch.LongTensor:
+    candidate_uids = []
+    avail_uids = []
+
+    for uid in range(self.metagraph.n.item()):
+        uid_is_available = check_uid_availability(
+            self.metagraph, uid, self.config.neuron.vpermit_tao_limit
+        )
+        uid_is_not_excluded = exclude is None or uid not in exclude
+
+        if uid_is_available:
+            avail_uids.append(uid)
+            if uid_is_not_excluded:
+                candidate_uids.append(uid)
+
+    return candidate_uids
+
+def get_candidate_uids(
+    self, miner_uids: List[int], responses: List[bool], peer_count: int, exclude: List[int] = None
+) -> torch.LongTensor:
+    # Querry the uids which response is True
+    volunteer_uids = [uid for uid, response in zip(miner_uids, responses) if response]
+    return volunteer_uids, volunteer_uids[:peer_count - 1] if peer_count - 1 < len(volunteer_uids) else volunteer_uids
+

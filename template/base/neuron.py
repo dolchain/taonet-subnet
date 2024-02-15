@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import copy
+import os
 import typing
 
 import bittensor as bt
@@ -26,7 +27,10 @@ from abc import ABC, abstractmethod
 from template.utils.config import check_config, add_args, config
 from template.utils.misc import ttl_get_block
 from template import __spec_version__ as spec_version
+from dotenv import load_dotenv
+load_dotenv()  # take environment variables from .env.
 
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 class BaseNeuron(ABC):
     """
@@ -99,6 +103,15 @@ class BaseNeuron(ABC):
         )
         self.step = 0
 
+        # Custom variables
+        self.rank = -1
+        self.peer_count = -1
+        self.master_addr = '0.0.0.0'
+        self.master_port = -1
+        self.model = None
+        # Indiciate if distributed learning is on progress
+        self.isTuring = False
+
     @abstractmethod
     async def forward(self, synapse: bt.Synapse) -> bt.Synapse: ...
 
@@ -119,7 +132,7 @@ class BaseNeuron(ABC):
             self.set_weights()
 
         # Always save state.
-        self.save_state()
+        # self.save_state()
 
     def check_registered(self):
         # --- Check for registration.
@@ -156,11 +169,13 @@ class BaseNeuron(ABC):
         ) > self.config.neuron.epoch_length
 
     def save_state(self):
+        pass
         bt.logging.warning(
             "save_state() not implemented for this neuron. You can implement this function to save model checkpoints or other useful data."
         )
 
     def load_state(self):
+        pass
         bt.logging.warning(
             "load_state() not implemented for this neuron. You can implement this function to load model checkpoints or other useful data."
         )
