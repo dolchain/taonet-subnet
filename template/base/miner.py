@@ -48,12 +48,14 @@ class BaseMinerNeuron(BaseNeuron):
         self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
         # Attach determiners which functions are called when servicing a request.
-        bt.logging.info(f"Attaching forward function to miner axon.")
+        bt.logging.info(f"Attaching forward functions to miner axon.")
+        # Remove forward function
+        # self.axon.attach(
+        #     forward_fn=self.forward,
+        #     blacklist_fn=self.blacklist,
+        #     priority_fn=self.priority,
+        # )
         self.axon.attach(
-            forward_fn=self.forward,
-            blacklist_fn=self.blacklist,
-            priority_fn=self.priority,
-        ).attach(
             forward_fn=self.call_miners,
             blacklist_fn=self.blacklist_call_miners,
         ).attach(
@@ -117,7 +119,7 @@ class BaseMinerNeuron(BaseNeuron):
                     < self.config.neuron.epoch_length
                 ):
                     if self.status == 'ready':
-                        self.train_thread = threading.Thread(target=train.run, args=(self, '', ), daemon=False)
+                        self.train_thread = threading.Thread(target=train.run, args=(self, False, ), daemon=False)
                         self.train_thread.start()
                         self.isTuring = True
                         self.status = 'working'

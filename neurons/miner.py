@@ -259,7 +259,7 @@ class Miner(BaseMinerNeuron):
             remote_model_store,
         )
         bt.logging.success(
-            f"Training with model from uid: {config.load_uid}. Model={str(model)}"
+            f"Training with model from uid: {vali_uid}. Model={str(model)}"
         )
         return model
 

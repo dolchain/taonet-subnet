@@ -14,7 +14,7 @@ from model.storage.chain.chain_model_metadata_store import ChainModelMetadataSto
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
 
 def push_model(self, model, metadata_store, remote_store):
-    bt.logging.warning(f'Pushing training model.')    
+    bt.logging.debug(f'Pushing training model.')
     self.loop.run_until_complete(taonet.mining.push(
         model,
         self.config.hf_repo_id,
@@ -23,12 +23,12 @@ def push_model(self, model, metadata_store, remote_store):
         remote_model_store=remote_store,
         uids = self.participate_uids if self.isTuring else [],
     ))
-    bt.logging.success(f'Pushed model')
+    bt.logging.debug(f'Pushed model')
 
-def run(self, model_dir: str):
+def run(self, do_push: bool):
     try:
         bt.logging.trace(
-            f'init processing with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
+            f'initing process group with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
 
         # Init process group
         dist.init_process_group(
@@ -40,7 +40,11 @@ def run(self, model_dir: str):
         )
         bt.logging.trace(
             f'init processed')
-        
+    except Exception as err:
+        bt.logging.debug('Error occured while initing process group', err)
+        return
+
+    try:        
         self.model = self.model.train()
         self.model = self.model.to(self.config.device)
 
@@ -68,7 +72,7 @@ def run(self, model_dir: str):
             epoch_loss = 0.0
 
             # Prepare the data loader with random pages for each epoch
-            bt.logging.success(
+            bt.logging.info(
                 f"Loading {self.config.pages_per_epoch} pages for training this epoch"
             )
             max_pages = SubsetFalconLoader.max_pages
@@ -99,12 +103,13 @@ def run(self, model_dir: str):
                     n_acc_steps += 1
 
                     # GRADIENT SHARE
-
                     optimizer.step()  # Perform a single optimization step
                     optimizer.zero_grad()  # Clear gradients
-                    bt.logging.success(
-                        f"Step: {n_acc_steps} loss: {outputs.loss.detach().item()}"
-                    )
+                    # Print log every time if it's a miner or one time per 5 steps if it's a vali
+                    if not do_push or n_acc_steps % 5 == 0:
+                        bt.logging.success(
+                            f"Step: {n_acc_steps} loss: {outputs.loss.detach().item()}"
+                        )
 
                 torch.cuda.empty_cache()
 
@@ -127,8 +132,8 @@ def run(self, model_dir: str):
                 bt.logging.success(
                     f"New best average loss: {best_avg_loss}.")
                 
-                # If model_dir is specified save the model
-                if model_dir != '':
+                # If do_push save the model (means vali)
+                if do_push:
                     # Upload model to Huggingface and publish chain if last uploaded block is over 100 blocks
                     if(self.block - last_upload_block > 100):
                         last_upload_block = self.block

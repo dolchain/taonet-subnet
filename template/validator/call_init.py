@@ -1,4 +1,5 @@
 import bittensor as bt
+import time
 
 from template.protocol import CallMiners, InitMiners
 from template.utils.uids import get_all_uids, get_candidate_uids
@@ -38,7 +39,11 @@ async def call_init(self):
         volunteer_uids, candidate_uids = get_candidate_uids(
             self, miner_uids=miner_uids, responses=volunteer_responses, peer_count=self.config.peer_count)
 
+        # If no miner responses recall
         if len(candidate_uids) == 0:
+            bt.logging.debug('No miner responses')
+            # Recall Miners after 5 mins
+            time.sleep(3) # time.sleep(300)
             continue
 
         peer_count = len(candidate_uids) + 1
@@ -56,7 +61,7 @@ async def call_init(self):
                 deserialize=True,  # Deserialize the response
             )
             candidate_responses.append(response)
-        bt.logging.success(f"candidate_responses: {candidate_responses}")
+            
 
         if all(candidate_responses):
             bt.logging.success(f"peer_uids: {candidate_uids}")

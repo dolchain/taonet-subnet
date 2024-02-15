@@ -433,10 +433,23 @@ class BaseValidatorNeuron(BaseNeuron):
                 f"Training with model from disk. Model={str(model)}")
             return model
 
+        try:
+            model = await taonet.mining.load_remote_model(
+                self.uid,
+                config.model_dir,
+                metagraph,
+                metadata_store,
+                remote_model_store,
+            )
+            bt.logging.success(
+                f"Training with model from uid:{self.uid}. Model={str(model)}")
+            return model
+
+        except Exception as e:
+            bt.logging.error('Failed to load the model from uid:{self.uid}. Error:', e)
         # Start from scratch.
         model = taonet.model.get_model()
         bt.logging.success(f"Training from scratch. Model={str(model)}")
-
         return model
 
     async def init_model(self):
@@ -603,7 +616,7 @@ class BaseValidatorNeuron(BaseNeuron):
             constants.alpha * self.weights + (1 - constants.alpha) * new_weights
         )
         self.weights = self.weights.nan_to_num(0.0)
-        print('weights', self.weights)
+        bt.logging.trace('weights', self.weights)
 
         # Filter based on win rate removing all by the sample_min best models for evaluation.
         # First remove any models that have an infinite loss and 0 weight.
@@ -719,17 +732,11 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.master_addr = self.axon.external_ip
                 self.master_port = utils.get_unused_port(self.config.port.range)
 
-                # Create a unique run id for this run.
-                run_id = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                model_dir = taonet.mining.model_path(
-                    self.config.model_dir, run_id)
-                os.makedirs(model_dir, exist_ok=True)
-
-                self.train_thread = threading.Thread(target = taonet.train.run, args=(self, model_dir, ), daemon=False)
+                self.train_thread = threading.Thread(target = taonet.train.run, args=(self, True, ), daemon=False)
                 self.train_thread.start()
 
                 self.isTuring = self.loop.run_until_complete(self.concurrent_start_train())
-            bt.logging.info('Validator is turing now.')
+            bt.logging.trace('Validator is turing now.')
             time.sleep(30)
 
     def run(self):
@@ -819,7 +826,7 @@ class BaseValidatorNeuron(BaseNeuron):
                     version_key=constants.weights_version_key,
                 )
                 if result:
-                    bt.logging.info("set_weights on chain successfully!")
+                    bt.logging.success("set_weights on chain successfully!")
                 else:
                     bt.logging.error("set_weights failed")
             except:
@@ -916,56 +923,61 @@ class BaseValidatorNeuron(BaseNeuron):
         Sets the validator weights to the metagraph hotkeys based on the scores it has received from the miners. The weights determine the trust and incentive level the validator assigns to miner nodes on the network.
         """
 
-        # Check if self.scores contains any NaN values and log a warning if it does.
-        if torch.isnan(self.scores).any():
-            bt.logging.warning(
-                f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
-            )
+        '''
+        Ignore template's set_weights func
+        Rather use set_weights in run thread
+        '''
+        
+        # # Check if self.scores contains any NaN values and log a warning if it does.
+        # if torch.isnan(self.scores).any():
+        #     bt.logging.warning(
+        #         f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
+        #     )
 
-        # Calculate the average reward for each uid across non-zero values.
-        # Replace any NaN values with 0.
-        raw_weights = torch.nn.functional.normalize(self.scores, p=1, dim=0)
+        # # Calculate the average reward for each uid across non-zero values.
+        # # Replace any NaN values with 0.
+        # raw_weights = torch.nn.functional.normalize(self.scores, p=1, dim=0)
 
-        bt.logging.debug("raw_weights", raw_weights)
-        bt.logging.debug("raw_weight_uids", self.metagraph.uids.to("cpu"))
-        # Process the raw weights to final_weights via subtensor limitations.
-        (
-            processed_weight_uids,
-            processed_weights,
-        ) = bt.utils.weight_utils.process_weights_for_netuid(
-            uids=self.metagraph.uids.to("cpu"),
-            weights=raw_weights.to("cpu"),
-            netuid=self.config.netuid,
-            subtensor=self.subtensor,
-            metagraph=self.metagraph,
-        )
-        bt.logging.debug("processed_weights", processed_weights)
-        bt.logging.debug("processed_weight_uids", processed_weight_uids)
+        # bt.logging.debug("raw_weights", raw_weights)
+        # bt.logging.debug("raw_weight_uids", self.metagraph.uids.to("cpu"))
+        # # Process the raw weights to final_weights via subtensor limitations.
+        # (
+        #     processed_weight_uids,
+        #     processed_weights,
+        # ) = bt.utils.weight_utils.process_weights_for_netuid(
+        #     uids=self.metagraph.uids.to("cpu"),
+        #     weights=raw_weights.to("cpu"),
+        #     netuid=self.config.netuid,
+        #     subtensor=self.subtensor,
+        #     metagraph=self.metagraph,
+        # )
+        # bt.logging.debug("processed_weights", processed_weights)
+        # bt.logging.debug("processed_weight_uids", processed_weight_uids)
 
-        # Convert to uint16 weights and uids.
-        (
-            uint_uids,
-            uint_weights,
-        ) = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
-            uids=processed_weight_uids, weights=processed_weights
-        )
-        bt.logging.debug("uint_weights", uint_weights)
-        bt.logging.debug("uint_uids", uint_uids)
+        # # Convert to uint16 weights and uids.
+        # (
+        #     uint_uids,
+        #     uint_weights,
+        # ) = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
+        #     uids=processed_weight_uids, weights=processed_weights
+        # )
+        # bt.logging.debug("uint_weights", uint_weights)
+        # bt.logging.debug("uint_uids", uint_uids)
 
-        # Set the weights on chain via our subtensor connection.
-        result = self.subtensor.set_weights(
-            wallet=self.wallet,
-            netuid=self.config.netuid,
-            uids=uint_uids,
-            weights=uint_weights,
-            wait_for_finalization=False,
-            wait_for_inclusion=True,
-            version_key=self.spec_version,
-        )
-        if result is True:
-            bt.logging.info("set_weights on chain successfully!")
-        else:
-            bt.logging.error("set_weights failed")
+        # # Set the weights on chain via our subtensor connection.
+        # result = self.subtensor.set_weights(
+        #     wallet=self.wallet,
+        #     netuid=self.config.netuid,
+        #     uids=uint_uids,
+        #     weights=uint_weights,
+        #     wait_for_finalization=False,
+        #     wait_for_inclusion=True,
+        #     version_key=self.spec_version,
+        # )
+        # if result is True:
+        #     bt.logging.info("set_weights on chain successfully!")
+        # else:
+        #     bt.logging.error("set_weights failed")
 
     def resync_metagraph(self):
         """Resyncs the metagraph and updates the hotkeys and moving averages based on the new metagraph."""
@@ -1064,7 +1076,7 @@ class BaseValidatorNeuron(BaseNeuron):
             self.step = state["step"]
             self.scores = state["scores"]
             self.weights = state["weights"]
-            bt.logging.success("Loaded Weights:", self.weights)
+            bt.logging.trace("Loaded Weights:", self.weights)
             self.hotkeys = state["hotkeys"]
 
         except Exception as e:
