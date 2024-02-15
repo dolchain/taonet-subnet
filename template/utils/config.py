@@ -190,7 +190,7 @@ def add_args(cls, parser):
         parser.add_argument(
             "--peer_count",
             type=int,
-            default=4,
+            default=3,
             help="The number of raining peers(miners)",
         )
             

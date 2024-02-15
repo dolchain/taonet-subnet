@@ -178,7 +178,7 @@ class Miner(BaseMinerNeuron):
         # Get free gpu size
         free_memory_list = get_free_gpu_memory()
         # If free gpu is not available refuse the call
-        if free_memory_list[0] < synapse.needed_gpu * 1024:
+        if free_memory_list[0] < synapse.needed_gpu * 1024 or self.status != 'waiting':
             synapse.will_work = False
             return synapse
         # Will work if not working currently

@@ -9,6 +9,8 @@ import taonet
 
 from taonet.dataset import SubsetFalconLoader
 from traceback import print_exception
+from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
+from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
 
 def run(self, model_dir: str):
     try:
@@ -42,6 +44,11 @@ def run(self, model_dir: str):
         n_acc_steps = 0
         best_avg_loss = math.inf
         accumulation_steps = self.config.accumulation_steps
+
+        last_upload_block = self.block
+        metadata_store = ChainModelMetadataStore(
+            self.subtensor, self.wallet, self.config.netuid)
+        remote_store = HuggingFaceModelStore()      
 
         while True:
             # Initialize loss accumulator for the epoch
@@ -100,8 +107,6 @@ def run(self, model_dir: str):
                 f"Epoch: {epoch_step} average loss: {avg_loss}")
             epoch_step += 1
 
-            self.isTuring = True
-
             # Check if the average loss of this epoch is the best we've seen so far
             if avg_loss < best_avg_loss:
                 best_avg_loss = avg_loss  # Update the best average loss
@@ -111,9 +116,19 @@ def run(self, model_dir: str):
                 
                 # If model_dir is specified save the model
                 if model_dir != '':
-                    # Save the model to your mining dir.
-                    bt.logging.info(f"Saving model to path: {model_dir}.")
-                    taonet.mining.save(ddp_model.module, model_dir)
+                    # Upload model to Huggingface and publish chain if last uploaded block is over 100 blocks
+                    if(self.block - last_upload_block > 100):
+                        last_upload_block = self.block
+                    bt.logging.warning(f'Pushing training model.')    
+                    self.loop.run_until_complete(taonet.mining.push(
+                        ddp_model.module,
+                        self.config.hf_repo_id,
+                        self.wallet,
+                        metadata_store=metadata_store,
+                        remote_model_store=remote_store,
+                        uids = self.participate_uids if self.isTuring else [],
+                    ))
+                    bt.logging.success(f'Pushed model')
 
     except Exception as err:
         bt.logging.error("Error during training", str(err))

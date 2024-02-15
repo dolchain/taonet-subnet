@@ -209,22 +209,6 @@ class BaseValidatorNeuron(BaseNeuron):
         """
         return os.path.join(self.config.model_dir, "vali-state")
 
-    def save_state(self):
-        """Saves the state of the validator to a file."""
-
-        bt.logging.trace("Saivng validator state.")
-        if not os.path.exists(self.state_path()):
-            os.makedirs(self.state_path())
-
-        with self.pending_uids_to_eval_lock:
-            # Save the state of the validator uids to file.
-            with open(self.uids_filepath, "wb") as f:
-                pickle.dump(self.uids_to_eval, f)
-                pickle.dump(self.pending_uids_to_eval, f)
-
-        # Save the state of the tracker to file.
-        self.model_tracker.save_state(self.tracker_filepath)
-
     def update_models(self):
         # Track how recently we updated each uid
         uid_last_checked = dict()
@@ -720,42 +704,6 @@ class BaseValidatorNeuron(BaseNeuron):
         # Sink step log.
         bt.logging.trace(f"Step results: {step_log}")
 
-    def push_model(self, model_dir):   
-        # Save the model to your mining dir.
-        bt.logging.info(f"Saving model to path: {model_dir}.")
-        taonet.mining.save(self.model, model_dir)
-        bt.logging.success(f"Saved model")
-
-        metadata_store = ChainModelMetadataStore(
-            self.subtensor, self.wallet, self.config.netuid)
-        remote_store = HuggingFaceModelStore()         
-
-        bt.logging.warning(f'Pushing training model.')    
-        self.loop.run_until_complete(taonet.mining.push(
-            self.model,
-            self.config.hf_repo_id,
-            self.wallet,
-            metadata_store=metadata_store,
-            remote_model_store=remote_store,
-            uids = self.participate_uids if self.isTuring else [],
-        ))
-        bt.logging.success(f'Pushed model')
-        
-        while True:
-            # Push model every 20 min
-            time.sleep(60) # time.sleep(1200)
-            # Load a model from a local directory.    
-            model = taonet.mining.load_local_model(model_dir)         
-            self.loop.run_until_complete(taonet.mining.push(
-                self.model,
-                self.config.hf_repo_id,
-                self.wallet,
-                metadata_store=metadata_store,
-                remote_model_store=remote_store,
-                uids = self.participate_uids if self.isTuring else [],
-            ))
-            bt.logging.success(f'Pushed model')
-
     def run(self):
         """
         Initiates and manages the main loop for the miner on the Bittensor network. The main loop handles graceful shutdown on keyboard interrupts and logs unforeseen errors.
@@ -804,10 +752,9 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.train_thread = threading.Thread(target = taonet.train.run, args=(self, model_dir, ), daemon=False)
                 self.train_thread.start()
 
-                self.push_model_thread = threading.Thread(target = self.push_model, args=(model_dir, ), daemon=False)
-                self.push_model_thread.start()
                 is_started = self.loop.run_until_complete(self.concurrent_start_train())
                 if is_started:
+                    self.isTuring = True
                     break
 
             while True: 
@@ -1084,10 +1031,23 @@ class BaseValidatorNeuron(BaseNeuron):
             {
                 "step": self.step,
                 "scores": self.scores,
+                "weights": self.weights,
                 "hotkeys": self.hotkeys,
             },
             self.config.neuron.full_path + "/state.pt",
         )
+
+        if not os.path.exists(self.state_path()):
+            os.makedirs(self.state_path())
+
+        with self.pending_uids_to_eval_lock:
+            # Save the state of the validator uids to file.
+            with open(self.uids_filepath, "wb") as f:
+                pickle.dump(self.uids_to_eval, f)
+                pickle.dump(self.pending_uids_to_eval, f)
+
+        # Save the state of the tracker to file.
+        self.model_tracker.save_state(self.tracker_filepath)
 
     def load_state(self):
         """Loads the state of the validator from a file."""
@@ -1097,4 +1057,6 @@ class BaseValidatorNeuron(BaseNeuron):
         state = torch.load(self.config.neuron.full_path + "/state.pt")
         self.step = state["step"]
         self.scores = state["scores"]
+        self.weights = state["weights"]
+        bt.logging.success("Loaded Weights:", self.weights)
         self.hotkeys = state["hotkeys"]

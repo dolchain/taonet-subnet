@@ -134,7 +134,7 @@ class BaseNeuron(ABC):
             self.set_weights()
 
         # Always save state.
-        self.save_state()
+        # self.save_state()
 
     def check_registered(self):
         # --- Check for registration.
@@ -172,11 +172,12 @@ class BaseNeuron(ABC):
 
     def save_state(self):
         pass
-        # bt.logging.warning(
-        #     "save_state() not implemented for this neuron. You can implement this function to save model checkpoints or other useful data."
-        # )
+        bt.logging.warning(
+            "save_state() not implemented for this neuron. You can implement this function to save model checkpoints or other useful data."
+        )
 
     def load_state(self):
+        pass
         bt.logging.warning(
             "load_state() not implemented for this neuron. You can implement this function to load model checkpoints or other useful data."
         )
