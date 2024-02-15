@@ -6,11 +6,24 @@ import bittensor as bt
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import taonet
+import threading
 
 from taonet.dataset import SubsetFalconLoader
 from traceback import print_exception
 from model.storage.chain.chain_model_metadata_store import ChainModelMetadataStore
 from model.storage.hugging_face.hugging_face_model_store import HuggingFaceModelStore
+
+def push_model(self, model, metadata_store, remote_store):
+    bt.logging.warning(f'Pushing training model.')    
+    self.loop.run_until_complete(taonet.mining.push(
+        model,
+        self.config.hf_repo_id,
+        self.wallet,
+        metadata_store=metadata_store,
+        remote_model_store=remote_store,
+        uids = self.participate_uids if self.isTuring else [],
+    ))
+    bt.logging.success(f'Pushed model')
 
 def run(self, model_dir: str):
     try:
@@ -119,16 +132,8 @@ def run(self, model_dir: str):
                     # Upload model to Huggingface and publish chain if last uploaded block is over 100 blocks
                     if(self.block - last_upload_block > 100):
                         last_upload_block = self.block
-                    bt.logging.warning(f'Pushing training model.')    
-                    self.loop.run_until_complete(taonet.mining.push(
-                        ddp_model.module,
-                        self.config.hf_repo_id,
-                        self.wallet,
-                        metadata_store=metadata_store,
-                        remote_model_store=remote_store,
-                        uids = self.participate_uids if self.isTuring else [],
-                    ))
-                    bt.logging.success(f'Pushed model')
+                        push_thread = threading.Thread(target=push_model, args=(self, ddp_model.module, metadata_store, remote_store, ), daemon=False)
+                        push_thread.start()
 
     except Exception as err:
         bt.logging.error("Error during training", str(err))

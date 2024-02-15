@@ -580,7 +580,10 @@ class BaseValidatorNeuron(BaseNeuron):
         model_weights = torch.zeros_like(self.weights)
 
         for vali_uid in miner_uids:
+            # Give win_rate as weight to validator organizing a turing
+            model_weights[vali_uid] += win_rate[vali_uid]
             for miner_uid in miner_uids[vali_uid]:
+                # Give win_rate as weight to miners participating on turing
                 model_weights[miner_uid] += win_rate[vali_uid]
         step_weights = torch.softmax(model_weights / constants.temperature, dim=0)
 
@@ -704,6 +707,28 @@ class BaseValidatorNeuron(BaseNeuron):
         # Sink step log.
         bt.logging.trace(f"Step results: {step_log}")
 
+    def turing(self):
+        while True:
+            while not self.isTuring:
+                self.model = self.loop.run_until_complete(self.concurrent_init_model())
+                self.loop.run_until_complete(self.concurrent_call_init())
+
+                self.master_addr = self.axon.external_ip
+                self.master_port = utils.get_unused_port(self.config.port.range)
+
+                # Create a unique run id for this run.
+                run_id = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                model_dir = taonet.mining.model_path(
+                    self.config.model_dir, run_id)
+                os.makedirs(model_dir, exist_ok=True)
+
+                self.train_thread = threading.Thread(target = taonet.train.run, args=(self, model_dir, ), daemon=False)
+                self.train_thread.start()
+
+                self.isTuring = self.loop.run_until_complete(self.concurrent_start_train())
+            bt.logging.info('Validator is turing now.')
+            time.sleep(30)
+
     def run(self):
         """
         Initiates and manages the main loop for the miner on the Bittensor network. The main loop handles graceful shutdown on keyboard interrupts and logs unforeseen errors.
@@ -735,27 +760,8 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # This loop maintains the validator's operations until intentionally stopped.
         try:
-            self.model = self.loop.run_until_complete(self.concurrent_init_model())
-
-            while True:
-                self.loop.run_until_complete(self.concurrent_call_init())
-
-                self.master_addr = self.axon.external_ip
-                self.master_port = utils.get_unused_port(self.config.port.range)
-
-                # Create a unique run id for this run.
-                run_id = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                model_dir = taonet.mining.model_path(
-                    self.config.model_dir, run_id)
-                os.makedirs(model_dir, exist_ok=True)
-
-                self.train_thread = threading.Thread(target = taonet.train.run, args=(self, model_dir, ), daemon=False)
-                self.train_thread.start()
-
-                is_started = self.loop.run_until_complete(self.concurrent_start_train())
-                if is_started:
-                    self.isTuring = True
-                    break
+            self.turing_thread = threading.Thread(target = self.turing, daemon=False)
+            self.turing_thread.start()
 
             while True: 
                 while (
@@ -1051,12 +1057,18 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def load_state(self):
         """Loads the state of the validator from a file."""
-        bt.logging.info("Loading validator state.")
+        bt.logging.info("Loading validator state.", self.config.neuron.full_path)
 
         # Load the state of the validator from file.
-        state = torch.load(self.config.neuron.full_path + "/state.pt")
-        self.step = state["step"]
-        self.scores = state["scores"]
-        self.weights = state["weights"]
-        bt.logging.success("Loaded Weights:", self.weights)
-        self.hotkeys = state["hotkeys"]
+        try:
+            state = torch.load(self.config.neuron.full_path + "/state.pt")
+            self.step = state["step"]
+            self.scores = state["scores"]
+            self.weights = state["weights"]
+            bt.logging.success("Loaded Weights:", self.weights)
+            self.hotkeys = state["hotkeys"]
+
+        except Exception as e:
+            bt.logging.error(
+                f"Error while loading state: {e} \n {traceback.format_exc()}"
+            )
