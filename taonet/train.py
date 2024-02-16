@@ -26,11 +26,10 @@ def push_model(self, model, metadata_store, remote_store):
     bt.logging.debug(f'Pushed model')
 
 def run(self, do_push: bool):
+    # Init process group
+    bt.logging.trace(
+        f'initing process group with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
     try:
-        bt.logging.trace(
-            f'initing process group with params: {self.rank}, {self.peer_count}, {self.master_addr}, {self.master_port}')
-
-        # Init process group
         dist.init_process_group(
             init_method=f"tcp://{self.master_addr}:{self.master_port}",
             backend='gloo',

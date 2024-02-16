@@ -208,14 +208,18 @@ class Miner(BaseMinerNeuron):
             f'loading model')
 
         # Load model.
-        metadata_store = ChainModelMetadataStore(
-            self.subtensor, self.wallet, self.config.netuid)
-        remote_store = HuggingFaceModelStore()
-        self.model: PreTrainedModel = await self.load_model_from_uid(
-            vali_uid, self.config, self.metagraph, metadata_store, remote_store
-        )
-        bt.logging.trace(
-            f'loaded model')
+        try:
+            metadata_store = ChainModelMetadataStore(
+                self.subtensor, self.wallet, self.config.netuid)
+            remote_store = HuggingFaceModelStore()
+            self.model: PreTrainedModel = await self.load_model_from_uid(
+                vali_uid, self.config, self.metagraph, metadata_store, remote_store
+            )
+            bt.logging.trace(
+                f'loaded model')
+        except Exception as err:
+            bt.logging.debug(f'Error occured while loading model from uid:{vali_uid}', err)
+            return
 
         self.rank = synapse.peer_rank
         self.peer_count = synapse.peer_count

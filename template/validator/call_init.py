@@ -60,7 +60,7 @@ async def call_init(self):
                                    peer_count=peer_count,),
                 deserialize=True,  # Deserialize the response
             )
-            candidate_responses.append(response)
+            candidate_responses.extend(response)
             
 
         if all(candidate_responses):
