@@ -1,2 +1,12 @@
 bittensor
+huggingface_hub
+matplotlib
+numpy
+pydantic==1.10
+python-dotenv
+rich
+safetensors
 torch
+transformers==4.34.1
+wandb
+GPUtil

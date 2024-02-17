@@ -450,6 +450,8 @@ class BaseValidatorNeuron(BaseNeuron):
         # Start from scratch.
         model = taonet.model.get_model()
         bt.logging.success(f"Training from scratch. Model={str(model)}")
+
+        taonet.train.push_model(self, model, metadata_store, remote_model_store)
         return model
 
     async def init_model(self):
@@ -1043,16 +1045,17 @@ class BaseValidatorNeuron(BaseNeuron):
         """Saves the state of the validator to a file."""
         bt.logging.info("Saving validator state.")
 
+        # Ignore template's save_state func
         # Save the state of the validator to file.
-        torch.save(
-            {
-                "step": self.step,
-                "scores": self.scores,
-                "weights": self.weights,
-                "hotkeys": self.hotkeys,
-            },
-            self.config.neuron.full_path + "/state.pt",
-        )
+        # torch.save(
+        #     {
+        #         "step": self.step,
+        #         "scores": self.scores,
+        #         "weights": self.weights,
+        #         "hotkeys": self.hotkeys,
+        #     },
+        #     self.config.neuron.full_path + "/state.pt",
+        # )
 
         if not os.path.exists(self.state_path()):
             os.makedirs(self.state_path())
@@ -1070,16 +1073,17 @@ class BaseValidatorNeuron(BaseNeuron):
         """Loads the state of the validator from a file."""
         bt.logging.info("Loading validator state.", self.config.neuron.full_path)
 
-        # Load the state of the validator from file.
-        try:
-            state = torch.load(self.config.neuron.full_path + "/state.pt")
-            self.step = state["step"]
-            self.scores = state["scores"]
-            self.weights = state["weights"]
-            bt.logging.trace("Loaded Weights:", self.weights)
-            self.hotkeys = state["hotkeys"]
+        # Ignore template's save_state func
+        # # Load the state of the validator from file.
+        # try:
+        #     state = torch.load(self.config.neuron.full_path + "/state.pt")
+        #     self.step = state["step"]
+        #     self.scores = state["scores"]
+        #     self.weights = state["weights"]
+        #     bt.logging.trace("Loaded Weights:", self.weights)
+        #     self.hotkeys = state["hotkeys"]
 
-        except Exception as e:
-            bt.logging.error(
-                f"Error while loading state: {e} \n {traceback.format_exc()}"
-            )
+        # except Exception as e:
+        #     bt.logging.error(
+        #         f"Error while loading state: {e} \n {traceback.format_exc()}"
+        #     )
